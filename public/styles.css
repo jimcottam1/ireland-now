@@ -282,4 +282,7 @@ a { color: var(--brand); }
     .layout { padding: 0 14px 14px; }
     .footer { padding: 12px 14px 20px; }
     .updated { max-width: 45%; }
+    .legend { font-size: 10.5px; padding: 6px 8px; max-width: 170px; bottom: 18px; }
+    .legend-row { margin-top: 0; }
+    .chip { font-size: 12px; padding: 4px 9px; }
 }

@@ -133,7 +133,8 @@
 
     // ---------- Map ----------
 
-    const map = L.map('map', { zoomSnap: 0.25, minZoom: 6, maxZoom: 14, zoomControl: true }).setView([53.4, -8.0], 7);
+    // minZoom 5 so the whole island fits on a phone
+    const map = L.map('map', { zoomSnap: 0.25, minZoom: 5, maxZoom: 14, zoomControl: true }).setView([53.4, -8.0], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -169,8 +170,22 @@
                 });
             }
         }).addTo(map);
-        map.fitBounds(countyLayer.getBounds(), { padding: [10, 10] });
+        fitIreland();
     }
+
+    // The controls above the map wrap differently by screen width, so measure the map after layout
+    function fitIreland() {
+        requestAnimationFrame(() => {
+            map.invalidateSize();
+            map.fitBounds(countyLayer.getBounds(), { padding: [10, 10] });
+        });
+    }
+
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => map.invalidateSize(), 200);
+    });
 
     // ---------- Overlays ----------
 
@@ -469,6 +484,19 @@
         renderMeta();
         selectCounty(counties.some(f => f.properties.id === initialCounty) ? initialCounty : null);
     }
+
+    // Following a link to another county or view on the same page
+    window.addEventListener('hashchange', () => {
+        if (!counties) return;
+        const county = readHash();
+        for (const [key, on] of Object.entries(overlays)) {
+            if (on && !map.hasLayer(overlayLayers[key])) overlayLayers[key].addTo(map);
+            if (!on && map.hasLayer(overlayLayers[key])) overlayLayers[key].remove();
+        }
+        renderControls();
+        renderLegend();
+        selectCounty(counties.some(f => f.properties.id === county) ? county : null);
+    });
 
     start().catch(error => {
         console.error(error);
