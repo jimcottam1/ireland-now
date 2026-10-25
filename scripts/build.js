@@ -3,6 +3,7 @@
 // takes the whole map down.
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const state = require('./lib/state');
 
 const ROOT = path.join(__dirname, '..');
@@ -45,6 +46,16 @@ async function build() {
     fs.rmSync(SITE_DIR, { recursive: true, force: true });
     fs.cpSync(PUBLIC_DIR, SITE_DIR, { recursive: true });
     fs.mkdirSync(path.join(SITE_DIR, 'data'), { recursive: true });
+
+    // GitHub Pages lets browsers cache files for 10 minutes; version the script and stylesheet by their
+    // content so a returning visitor never gets a new page with old code
+    const indexPath = path.join(SITE_DIR, 'index.html');
+    let index = fs.readFileSync(indexPath, 'utf8');
+    for (const asset of ['app.js', 'styles.css']) {
+        const hash = crypto.createHash('sha1').update(fs.readFileSync(path.join(PUBLIC_DIR, asset))).digest('hex').slice(0, 8);
+        index = index.replace(`"${asset}"`, `"${asset}?v=${hash}"`);
+    }
+    fs.writeFileSync(indexPath, index);
 
     const results = await Promise.all(Object.entries(LAYERS).map(async ([name, layer]) => [name, await runLayer(name, layer)]));
 
