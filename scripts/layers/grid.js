@@ -16,14 +16,24 @@ async function series(area) {
     const from = new Date(to.getTime() - 86400000);
     const url = `https://www.smartgriddashboard.com/api/chart/?region=ALL&chartType=default&dateRange=day`
         + `&dateFrom=${day(from)}&dateTo=${day(to)}&areas=${area}`;
-    const { Rows } = await getJson(url);
-    return Rows.filter(r => r.Value !== null);
+    // The dashboard sometimes answers with an empty series; one retry usually fixes it
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const { Rows } = await getJson(url);
+        const rows = (Rows || []).filter(r => r.Value !== null);
+        if (rows.length) return rows;
+        await new Promise(r => setTimeout(r, 3000));
+    }
+    return [];
 }
 
 const latest = rows => rows.length ? rows[rows.length - 1] : null;
 
 async function fetchGrid() {
-    const [wind, demand, co2] = await Promise.all([series('windactual'), series('demandactual'), series('co2intensity')]);
+    // One at a time: the dashboard returned empty series when asked for all three at once
+    const wind = await series('windactual');
+    const demand = await series('demandactual');
+    const co2 = await series('co2intensity');
+    if (!wind.length || !demand.length) throw new Error('EirGrid returned no wind or demand data');
     const w = latest(wind);
     const d = latest(demand);
     const c = latest(co2);
