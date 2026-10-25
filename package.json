@@ -1,0 +1,18 @@
+{
+  "name": "ireland-now",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ireland Now: a clickable map of live public data for every county",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "counties": "node scripts/prepare-counties.js",
+    "preview": "npx --yes serve site"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.16"
+  }
+}

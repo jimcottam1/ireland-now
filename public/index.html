@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ireland Now - live public data for every county</title>
+    <meta name="description" content="A clickable map of Ireland: weather warnings, river levels, trains, water notices, beaches, house prices, population and TDs for every county, updated every hour.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <div>
+                <h1>Ireland Now</h1>
+                <p>Live public data for every county</p>
+            </div>
+        </div>
+        <p class="updated" id="updated">Loading&hellip;</p>
+    </header>
+
+    <section class="national" id="national" aria-label="National overview"></section>
+
+    <main class="layout">
+        <section class="map-area">
+            <div class="controls">
+                <div class="control-group" role="radiogroup" aria-label="Colour counties by" id="views"></div>
+                <div class="control-group overlays" aria-label="Show on map" id="overlays"></div>
+            </div>
+            <div id="map" aria-label="Map of Ireland"></div>
+            <div class="legend" id="legend"></div>
+        </section>
+
+        <aside class="panel" id="panel" aria-live="polite"></aside>
+    </main>
+
+    <footer class="footer" id="footer"></footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="app.js"></script>
+</body>
+</html>
