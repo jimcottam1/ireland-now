@@ -38,6 +38,8 @@ jobs:
           restore-keys: state-
 
       - name: Fetch data and build site
+        env:
+          NTA_API_KEY: ${{ secrets.NTA_API_KEY }}
         run: npm run build
 
       - name: Save state

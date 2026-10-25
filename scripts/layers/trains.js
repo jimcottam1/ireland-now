@@ -1,5 +1,6 @@
 // Irish Rail: trains running right now, with where they are and how late.
 const { getText } = require('../lib/http');
+const { countyAt } = require('../lib/geo');
 
 const SOURCE = {
     name: 'Irish Rail realtime API',
@@ -28,7 +29,9 @@ async function fetchTrains() {
             progress: lines[2] || '',
             minutesLate: late ? parseInt(late[1], 10) : null
         };
-    }).filter(t => t.status === 'R' && Number.isFinite(t.lat) && t.lat !== 0);
+    })
+        .filter(t => t.status === 'R' && Number.isFinite(t.lat) && t.lat !== 0)
+        .map(t => ({ ...t, county: countyAt(t.lon, t.lat) }));
 
     const late = trains.filter(t => t.minutesLate >= 5);
     return {

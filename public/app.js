@@ -2,14 +2,14 @@
 (function () {
     'use strict';
 
-    const LAYERS = ['warnings', 'weather', 'rivers', 'tides', 'trains', 'grid', 'water', 'beaches', 'tds', 'housing', 'population'];
+    const LAYERS = ['warnings', 'weather', 'rivers', 'tides', 'trains', 'buses', 'grid', 'water', 'beaches', 'tds', 'housing', 'population'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
     let countyLayer = null;
     let selected = null;   // county id
     let view = 'warnings';
-    const overlays = { water: true, rivers: false, tides: false, trains: false };
+    const overlays = { water: true, rivers: false, tides: false, trains: false, buses: false };
     const overlayLayers = {};
 
     // ---------- Helpers ----------
@@ -237,6 +237,17 @@
                 }).bindPopup(`<strong>${esc(t.route || t.direction)}</strong><br>${esc(t.progress)}<br>
                     <span class="popup-meta">${esc(t.code)} · ${late > 0 ? `${late} min late` : 'On time'} · position at last update</span>`);
             }))
+        },
+        buses: {
+            label: 'Buses', colour: '#c2410c',
+            build: () => L.layerGroup((data.buses?.buses || []).map(b => {
+                const late = b.minutesLate;
+                return L.circleMarker([b.lat, b.lon], {
+                    radius: 4, weight: 1, color: '#fff',
+                    fillColor: late == null ? '#7c8b85' : late >= 10 ? '#d7263d' : late >= 5 ? '#ef8a1f' : '#c2410c', fillOpacity: 0.9
+                }).bindPopup(`<strong>${esc(b.route)}</strong> ${esc(b.name)}<br>${esc(b.operator)}<br>
+                    <span class="popup-meta">${late == null ? 'No delay information' : late > 0 ? `${late} min late` : late < 0 ? `${-late} min early` : 'On time'} · position at last update</span>`);
+            }))
         }
     };
 
@@ -309,6 +320,7 @@
             ['Weather warnings', w.length ? `${w.length} active` : 'None', top ? `Highest: ${top}` : 'Met Éireann'],
             ['Wind power', g?.windPercent != null ? `${g.windPercent}%` : '–', g ? `of demand · ${fmt(g.demandMW)} MW · ${fmt(g.co2)} gCO₂/kWh` : ''],
             ['Trains running', t ? fmt(t.running) : '–', t ? `${t.late} running 5+ min late` : ''],
+            ['Buses tracked', data.buses ? fmt(data.buses.national.running) : '–', data.buses ? `${fmt(data.buses.national.late)} running 5+ min late` : ''],
             ['Water notices', fmt(water.filter(n => n.active).length), `${water.filter(n => !n.active).length} more due this week`],
             ['Rivers rising', data.rivers ? fmt(rising) : '–', data.rivers ? `of ${fmt(data.rivers.stations.length)} gauges` : ''],
             ['House prices', h ? euro(h.median) : '–', h ? `${pct(h.change)} on last year` : '']
@@ -368,6 +380,20 @@
                     : `<p class="soft">${rising.length ? `<strong>${rising.length}</strong> rising` : 'None rising'} in the last 6 hours.</p>
                     <ul class="list">${known.slice(0, 5).map(s => `<li>${esc(s.name)} <span class="trend ${s.change > 0 ? 'up' : 'down'}">${s.change > 0 ? '+' : ''}${(s.change * 100).toFixed(0)} cm</span>
                     <span class="meta">${esc(s.level.toFixed(2))} m</span></li>`).join('')}</ul>`, ['waterlevel.ie', 'https://waterlevel.ie/']);
+        }
+
+        // Public transport right now
+        if (data.buses || data.trains) {
+            const buses = (data.buses?.buses || []).filter(b => b.county === id);
+            const trains = (data.trains?.trains || []).filter(t => t.county === id);
+            const routes = Object.entries(buses.reduce((acc, b) => (acc[b.route] = (acc[b.route] || 0) + 1, acc), {}))
+                .sort((a, b) => b[1] - a[1]).slice(0, 8).map(([r]) => r).filter(Boolean);
+            const late = buses.filter(b => b.minutesLate >= 5).length + trains.filter(t => t.minutesLate >= 5).length;
+            html += section('Public transport now', buses.length || trains.length ? `
+                <div class="row"><span class="big">${esc(fmt(buses.length))}</span><span class="soft">buses</span>
+                <span class="big">${esc(fmt(trains.length))}</span><span class="soft">trains</span></div>
+                <p class="muted">${late ? `${late} running 5+ minutes late` : 'None running notably late'}${routes.length ? ` · busiest routes: ${esc(routes.join(', '))}` : ''}</p>`
+                : '<p class="soft">No tracked buses or trains here at the last update.</p>', ['TFI Live', 'https://www.transportforireland.ie/']);
         }
 
         // House prices

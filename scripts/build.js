@@ -17,6 +17,7 @@ const LAYERS = {
     rivers: [require('./layers/rivers').fetchRivers, 0],
     tides: [require('./layers/tides').fetchTides, 0],
     trains: [require('./layers/trains').fetchTrains, 0],
+    buses: [require('./layers/buses').fetchBuses, 0],
     grid: [require('./layers/grid').fetchGrid, 0],
     water: [require('./layers/water').fetchWater, 0],
     beaches: [require('./layers/beaches').fetchBeaches, 24],
