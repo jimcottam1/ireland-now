@@ -134,7 +134,8 @@
     // ---------- Map ----------
 
     // minZoom 5 so the whole island fits on a phone
-    const map = L.map('map', { zoomSnap: 0.25, minZoom: 5, maxZoom: 14, zoomControl: true }).setView([53.4, -8.0], 7);
+    // Canvas rendering copes far better than SVG with ~700 bus markers
+    const map = L.map('map', { preferCanvas: true, zoomSnap: 0.25, minZoom: 5, maxZoom: 14, zoomControl: true }).setView([53.4, -8.0], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
