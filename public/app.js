@@ -2,7 +2,7 @@
 (function () {
     'use strict';
 
-    const LAYERS = ['warnings', 'weather', 'rivers', 'tides', 'trains', 'buses', 'grid', 'water', 'beaches', 'tds', 'housing', 'population'];
+    const LAYERS = ['warnings', 'weather', 'rivers', 'tides', 'trains', 'buses', 'grid', 'water', 'beaches', 'tds', 'housing', 'population', 'placenames'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
@@ -167,7 +167,7 @@
                 layer.on({
                     mouseover: e => e.target.setStyle({ weight: 2.5, color: '#14211c' }),
                     mouseout: () => restyle(),
-                    click: () => selectCounty(id)
+                    click: e => { selectCounty(id); showTownland(e.latlng, id); }
                 });
             }
         }).addTo(map);
@@ -383,6 +383,15 @@
                     <span class="meta">${esc(s.level.toFixed(2))} m</span></li>`).join('')}</ul>`, ['waterlevel.ie', 'https://waterlevel.ie/']);
         }
 
+        // Place names
+        const pn = data.placenames?.counties?.[id];
+        if (pn) {
+            html += section('Place names', `
+                <div class="row"><span class="big">${esc(fmt(pn.townlands))}</span><span class="soft">townlands</span></div>
+                <p class="muted">${esc(fmt(pn.towns))} towns · ${esc(fmt(pn.parishes))} civil parishes · ${esc(fmt(pn.baronies))} baronies${pn.islands ? ` · ${esc(fmt(pn.islands))} islands` : ''}</p>
+                <p class="soft">Click anywhere on the map to see its townland and Irish name.</p>`, ['logainm.ie', 'https://www.logainm.ie/']);
+        }
+
         // Public transport right now
         if (data.buses || data.trains) {
             const buses = (data.buses?.buses || []).filter(b => b.county === id);
@@ -492,6 +501,98 @@
             if (res.ok) data[name] = await res.json();
         } catch { /* layer stays missing; panels show "not available" */ }
     }
+
+    // ---------- Place names (Logainm): townland on click, and search ----------
+
+    const CATEGORY_LABELS = { BF: 'Townland', B: 'Town', SRB: 'Suburb', PAR: 'Civil parish', BAR: 'Barony', OIL: 'Island' };
+    const placeFiles = {};
+    let placeMarker = null;
+
+    async function placesFor(countyId) {
+        if (!placeFiles[countyId]) {
+            placeFiles[countyId] = fetch(`data/places/${countyId}.json`).then(r => r.ok ? r.json() : []).catch(() => []);
+        }
+        return placeFiles[countyId];
+    }
+
+    const logainmLink = id => `https://www.logainm.ie/${encodeURIComponent(id)}.aspx`;
+
+    // Townland points are their centres, so the nearest one is (almost always) the townland you clicked in
+    async function showTownland(latlng, countyId) {
+        if (!data.placenames) return;
+        const places = await placesFor(countyId);
+        const kx = Math.cos(latlng.lat * Math.PI / 180);
+        let best = null;
+        let bestD = Infinity;
+        for (const p of places) {
+            if (p[1] !== 'BF') continue;
+            const d = ((p[5] - latlng.lng) * kx) ** 2 + (p[4] - latlng.lat) ** 2;
+            if (d < bestD) { bestD = d; best = p; }
+        }
+        if (!best) return;
+        const [id, , en, ga, , , parishEn, parishGa] = best;
+        L.popup({ autoPan: false })
+            .setLatLng(latlng)
+            .setContent(`<span class="popup-meta">Townland</span><br><strong>${esc(en)}</strong>${ga ? ` · <em>${esc(ga)}</em>` : ''}
+                ${parishEn ? `<br><span class="popup-meta">Civil parish of ${esc(parishEn)}${parishGa ? ` (${esc(parishGa)})` : ''}, Co. ${esc(nameOf(countyId))}</span>` : ''}
+                <br><a href="${logainmLink(id)}" target="_blank" rel="noopener">History and pronunciation on logainm.ie</a>`)
+            .openOn(map);
+    }
+
+    const fold = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+    function searchPlaces(query) {
+        const q = fold(query.trim());
+        if (q.length < 2 || !data.placenames?.search) return [];
+        const starts = [];
+        const contains = [];
+        for (const row of data.placenames.search) {
+            const en = fold(row[2]);
+            const ga = fold(row[3]);
+            if (en.startsWith(q) || ga.startsWith(q)) starts.push(row);
+            else if (en.includes(q) || ga.includes(q)) contains.push(row);
+            if (starts.length >= 12) break;
+        }
+        // Towns first, then the rest
+        const rank = r => ['B', 'SRB', 'OIL', 'PAR', 'BAR'].indexOf(r[1]);
+        return [...starts.sort((a, b) => rank(a) - rank(b)), ...contains].slice(0, 12);
+    }
+
+    let searchMatches = [];
+    const searchBox = document.getElementById('search');
+    const resultsBox = document.getElementById('search-results');
+
+    function renderResults() {
+        resultsBox.hidden = !searchMatches.length;
+        resultsBox.innerHTML = searchMatches.map((r, i) => `
+            <li role="option" data-result="${i}"><strong>${esc(r[2])}</strong>${r[3] ? ` <em>${esc(r[3])}</em>` : ''}
+            <span>${esc(CATEGORY_LABELS[r[1]] || '')} · Co. ${esc(nameOf(r[6]))}</span></li>`).join('');
+    }
+
+    function goToPlace(r) {
+        const [id, cat, en, ga, lat, lon, county] = r;
+        searchMatches = [];
+        renderResults();
+        searchBox.value = en;
+        map.setView([lat, lon], { B: 13, SRB: 14, OIL: 12, PAR: 12, BAR: 11 }[cat] || 12);
+        placeMarker?.remove();
+        placeMarker = L.marker([lat, lon]).addTo(map)
+            .bindPopup(`<span class="popup-meta">${esc(CATEGORY_LABELS[cat] || '')}</span><br><strong>${esc(en)}</strong>${ga ? ` · <em>${esc(ga)}</em>` : ''}
+                <br><a href="${logainmLink(id)}" target="_blank" rel="noopener">History and pronunciation on logainm.ie</a>`)
+            .openPopup();
+        if (county) selectCounty(county);
+    }
+
+    searchBox.addEventListener('input', () => { searchMatches = searchPlaces(searchBox.value); renderResults(); });
+    searchBox.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && searchMatches[0]) { e.preventDefault(); goToPlace(searchMatches[0]); }
+        if (e.key === 'Escape') { searchMatches = []; renderResults(); }
+    });
+    resultsBox.addEventListener('click', e => {
+        const li = e.target.closest('[data-result]');
+        if (li) goToPlace(searchMatches[Number(li.dataset.result)]);
+    });
+    document.addEventListener('click', e => { if (!e.target.closest('.search')) { searchMatches = []; renderResults(); } });
 
     async function start() {
         const initialCounty = readHash();

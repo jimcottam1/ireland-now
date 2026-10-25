@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -40,6 +40,7 @@ jobs:
       - name: Fetch data and build site
         env:
           NTA_API_KEY: ${{ secrets.NTA_API_KEY }}
+          LOGAINM_API_KEY: ${{ secrets.LOGAINM_API_KEY }}
         run: npm run build
 
       - name: Save state

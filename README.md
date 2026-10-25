@@ -2,7 +2,7 @@
 
 A clickable map of live public data for every county in Ireland, published as a static site on GitHub Pages.
 
-Click a county for its weather warnings, current weather, water notices, river levels, bathing waters, house prices, population and TDs. Colour the map by warnings, temperature, rain, house prices, price change, population density or water notices, and switch on live points for water notices, river gauges, tide gauges and trains.
+Search for any town, parish or island, click anywhere for its townland and Irish name, or click a county for its weather warnings, current weather, water notices, river levels, bathing waters, house prices, population and TDs. Colour the map by warnings, temperature, rain, house prices, price change, population density or water notices, and switch on live points for water notices, river gauges, tide gauges and trains.
 
 ## How it works
 
@@ -32,6 +32,7 @@ The `state/` folder carries over between runs in the GitHub Actions cache. It ho
 | TDs | [Oireachtas API](https://api.oireachtas.ie/) | Daily |
 | House prices | [Property Price Register](https://www.propertypriceregister.ie/) | Daily |
 | Population | [CSO](https://data.cso.ie/table/FY003A) Census 2022 | Monthly |
+| Place names | [Logainm](https://www.logainm.ie/) (needs the `LOGAINM_API_KEY` repository secret): 55,000 townlands, towns, parishes, baronies and islands, for the search box and click-for-townland | Monthly |
 | County boundaries | [Tailte Éireann](https://data-osi.opendata.arcgis.com/) (simplified, in `public/data/`) | Fixed |
 
 Map tiles © OpenStreetMap contributors.
@@ -41,7 +42,6 @@ Map tiles © OpenStreetMap contributors.
 - **Power cuts:** ESB Networks' PowerCheck API needs a subscription key.
 - **Hospital trolleys:** INMO publishes these through its website, not a public feed.
 - **Air quality:** the EPA's air quality site doesn't offer a public API.
-- **Place names:** needs a free Logainm API key.
 
 ## Local development
 

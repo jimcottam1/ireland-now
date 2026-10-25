@@ -23,7 +23,8 @@ const LAYERS = {
     beaches: [require('./layers/beaches').fetchBeaches, 24],
     tds: [require('./layers/tds').fetchTds, 24],
     housing: [require('./layers/housing').fetchHousing, 24],
-    population: [require('./layers/population').fetchPopulation, 24 * 30]
+    population: [require('./layers/population').fetchPopulation, 24 * 30],
+    placenames: [require('./layers/placenames').fetchPlacenames, 24 * 30]
 };
 
 async function runLayer(name, [fetchLayer, maxAgeHours]) {
@@ -64,8 +65,14 @@ async function build() {
     for (const [name, { data, status: s }] of results) {
         status.layers[name] = s;
         if (data) {
-            const { fromCache, ...clean } = data;
+            // Large layers can split extra files out (e.g. place names per county), loaded on demand
+            const { fromCache, files, ...clean } = data;
             fs.writeFileSync(path.join(SITE_DIR, 'data', `${name}.json`), JSON.stringify(clean));
+            for (const [file, content] of Object.entries(files || {})) {
+                const target = path.join(SITE_DIR, 'data', file);
+                fs.mkdirSync(path.dirname(target), { recursive: true });
+                fs.writeFileSync(target, JSON.stringify(content));
+            }
         }
     }
     fs.writeFileSync(path.join(SITE_DIR, 'data', 'status.json'), JSON.stringify(status, null, 2));
