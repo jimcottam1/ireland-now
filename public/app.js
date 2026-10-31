@@ -2,14 +2,15 @@
 (function () {
     'use strict';
 
-    const LAYERS = ['warnings', 'weather', 'rivers', 'tides', 'trains', 'buses', 'grid', 'water', 'beaches', 'tds', 'housing', 'population', 'placenames'];
+    const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
+        'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
     let countyLayer = null;
     let selected = null;   // county id
     let view = 'warnings';
-    const overlays = { water: true, rivers: false, tides: false, trains: false, buses: false };
+    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false };
     const overlayLayers = {};
 
     // ---------- Helpers ----------
@@ -19,6 +20,40 @@
     const euro = n => n == null ? '–' : '€' + Math.round(n / 1000).toLocaleString('en-IE') + 'k';
     const pct = n => n == null ? '–' : (n > 0 ? '+' : '') + n.toFixed(1) + '%';
     const nameOf = id => counties?.find(f => f.properties.id === id)?.properties.name || id;
+
+    const per1000 = (n, id) => {
+        const pop = data.population?.counties?.[id]?.population;
+        return n == null || !pop ? null : 1000 * n / pop;
+    };
+    const dayName = date => new Date(date + 'T12:00:00Z').toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' });
+    const euroL = n => n == null ? '–' : '€' + n.toFixed(3);
+    const monthName = label => String(label || '').replace(/^(\d{4}) (\w+)$/, '$2 $1');   // CSO "2026 September" -> "September 2026"
+    const AQI_BANDS = [[20, 'Good'], [40, 'Fair'], [60, 'Moderate'], [80, 'Poor'], [100, 'Very poor'], [Infinity, 'Extremely poor']];
+    const aqiBand = v => AQI_BANDS.find(([max]) => v <= max)[1];
+
+    /** A small line chart: series = [{ values, colour, label }] sharing one x axis; labels = [left, right] under it. */
+    function spark(series, { height = 64, labels = [], unit = '', min = null } = {}) {
+        const all = series.flatMap(s => s.values).filter(v => v != null);
+        if (all.length < 2) return '';
+        const lo = min ?? Math.min(...all);
+        const hi = Math.max(...all);
+        const span = hi - lo || 1;
+        const w = 300;
+        const n = Math.max(...series.map(s => s.values.length));
+        const points = values => values
+            .map((v, i) => v == null ? null : `${(i / (n - 1) * w).toFixed(1)},${(height - 4 - (v - lo) / span * (height - 8)).toFixed(1)}`)
+            .filter(Boolean).join(' ');
+        const num = v => (Math.abs(v) >= 100 ? fmt(Math.round(v)) : String(Math.round(v * 100) / 100));
+        return `<figure class="spark">
+            <svg viewBox="0 0 ${w} ${height}" preserveAspectRatio="none" role="img" aria-label="${esc(series.map(s => s.label).join(' and '))}, ${esc(num(lo))} to ${esc(num(hi))}${esc(unit)}">
+                ${series.map(s => `<polyline points="${points(s.values)}" fill="none" stroke="${s.colour}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`).join('')}
+            </svg>
+            <figcaption><span>${esc(labels[0] || '')}</span>
+                <span class="spark-key">${series.map(s => `<span><i style="background:${s.colour}"></i>${esc(s.label)}</span>`).join('')}</span>
+                <span>${esc(labels[1] || '')}</span></figcaption>
+            <div class="spark-range">Range ${esc(num(lo))}–${esc(num(hi))}${esc(unit)}</div>
+        </figure>`;
+    }
 
     function ago(iso) {
         const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -100,6 +135,27 @@
             transform: v => v ? Math.log10(v) : null,
             describe: v => v == null ? 'No data' : `${fmt(v)} people per km²`,
             ends: ['20 /km²', '2,000 /km²'], title: 'Population density (Census 2022)'
+        },
+        air: {
+            label: 'Air quality',
+            stops: [[10, '50c1a8'], [30, 'e8d84d'], [50, 'ef8a1f'], [80, 'c9302c'], [100, '7d1d6b']],
+            value: id => data.airquality?.counties?.[id]?.aqi,
+            describe: v => v == null ? 'No data' : `Air quality ${aqiBand(v).toLowerCase()} (index ${v})`,
+            ends: ['Good', 'Very poor'], title: 'European Air Quality Index (model estimate)'
+        },
+        trolleyView: {
+            label: 'Trolleys',
+            stops: [[0, 'f3f0ef'], [5, 'f2c4b4'], [15, 'e0745a'], [35, '9e1b1b']],
+            value: id => data.trolleys ? (data.trolleys.counties[id]?.total ?? null) : null,
+            describe: v => v == null ? 'No acute hospital reporting' : `${v} patient${v === 1 ? '' : 's'} on trolleys`,
+            ends: ['0', '35+'], title: 'Patients on trolleys at 8am (HSE TrolleyGAR)'
+        },
+        homes: {
+            label: 'New homes',
+            stops: [[3, 'eef2f8'], [6, 'b6c8e6'], [10, '5f86c4'], [14, '23427f']],
+            value: id => per1000(data.economy?.counties?.[id]?.newHomes, id),
+            describe: v => v == null ? 'No data' : `${v.toFixed(1)} new homes per 1,000 people in a year`,
+            ends: ['3', '14+ per 1,000'], title: 'New homes completed in the last year, per 1,000 people'
         },
         waterView: {
             label: 'Water notices',
@@ -208,6 +264,19 @@
                     <a href="https://www.water.ie/water-service-updates" target="_blank" rel="noopener">Uisce Éireann updates</a>`)
             ))
         },
+        stations: {
+            label: 'Weather stations', colour: '#6b4fbb',
+            build: () => L.layerGroup((data.observations?.stations || []).filter(s => s.temperature != null).map(s =>
+                L.marker([s.lat, s.lon], {
+                    icon: L.divIcon({ className: 'temp-marker', html: `<span>${Math.round(s.temperature)}°</span>`, iconSize: [34, 22], iconAnchor: [17, 11] }),
+                    keyboard: false
+                }).bindPopup(`<strong>${esc(s.name)}</strong> <span class="popup-meta">Met Éireann station</span><br>
+                    ${esc(s.temperature)}°C${s.description ? `, ${esc(s.description.trim())}` : ''}<br>
+                    Wind ${esc(s.windKmh ?? '–')} km/h ${esc(s.windDirection || '')}${s.gustKmh ? `, gusts ${esc(s.gustKmh)} km/h` : ''}<br>
+                    Rain today ${esc(s.rainToday)} mm · humidity ${esc(s.humidity ?? '–')}%<br>
+                    <span class="popup-meta">Reported at ${esc(s.time)}</span>`)
+            ))
+        },
         rivers: {
             label: 'Rivers', colour: '#3d7ea6',
             build: () => L.layerGroup((data.rivers?.stations || []).map(s =>
@@ -226,6 +295,27 @@
                 L.circleMarker([g.lat, g.lon], { radius: 6, weight: 2, color: '#1aa3a3', fillColor: '#fff', fillOpacity: 1 })
                     .bindPopup(`<strong>${esc(g.name)}</strong><br>${esc(g.level.toFixed(2))} m above lowest astronomical tide<br>
                         <span class="popup-meta">Tide ${esc(g.direction)} · ${esc(when(g.time))}</span>`)
+            ))
+        },
+        buoys: {
+            label: 'Sea buoys', colour: '#0e7490',
+            build: () => L.layerGroup((data.marine?.buoys || []).map(b =>
+                L.circleMarker([b.lat, b.lon], { radius: 7, weight: 3, color: '#0e7490', fillColor: '#f5d90a', fillOpacity: 1 })
+                    .bindPopup(`<strong>${esc(b.name)}</strong> <span class="popup-meta">${esc(b.place)}</span><br>
+                        Waves ${esc(b.waveHeight ?? '–')} m, every ${esc(b.wavePeriod ?? '–')} s<br>
+                        Wind ${esc(b.windKmh ?? '–')} km/h${b.gustKmh ? `, gusts ${esc(b.gustKmh)} km/h` : ''}<br>
+                        Sea ${esc(b.seaTemperature ?? '–')}°C · air ${esc(b.airTemperature ?? '–')}°C · ${esc(b.pressure ?? '–')} hPa<br>
+                        <span class="popup-meta">${esc(when(b.time))}</span>`)
+            ))
+        },
+        quakes: {
+            label: 'Earthquakes', colour: '#c2410c',
+            build: () => L.layerGroup((data.earthquakes?.quakes || []).map(q =>
+                L.circleMarker([q.lat, q.lon], {
+                    radius: 4 + Math.max(0, q.magnitude ?? 0) * 3, weight: 1.5, color: '#9a3412', fillColor: '#f97316', fillOpacity: 0.45
+                }).bindPopup(`<strong>Magnitude ${esc(q.magnitude ?? '?')}</strong> · ${esc(q.depthKm ?? '?')} km deep<br>
+                    ${esc(when(q.time))}<br><span class="popup-meta">${esc(q.region)} · recorded by ${esc(q.agency)}</span><br>
+                    <a href="${esc(q.url)}" target="_blank" rel="noopener">EMSC details</a>`)
             ))
         },
         trains: {
@@ -316,6 +406,13 @@
         const water = data.water?.notices || [];
         const rising = (data.rivers?.stations || []).filter(s => s.trend.startsWith('rising')).length;
         const h = data.housing?.national;
+        const econ = data.economy?.national;
+        const fuel = data.fuel?.national;
+        const tr = data.trolleys;
+        const sp = data.space?.national;
+        const worstAir = data.airquality
+            ? Object.entries(data.airquality.counties).filter(([, c]) => c.aqi != null).sort((a, b) => b[1].aqi - a[1].aqi)[0]
+            : null;
 
         const cards = [
             ['Weather warnings', w.length ? `${w.length} active` : 'None', top ? `Highest: ${top}` : 'Met Éireann'],
@@ -324,7 +421,13 @@
             ['Buses tracked', data.buses ? fmt(data.buses.national.running) : '–', data.buses ? `${fmt(data.buses.national.late)} running 5+ min late` : ''],
             ['Water notices', fmt(water.filter(n => n.active).length), `${water.filter(n => !n.active).length} more due this week`],
             ['Rivers rising', data.rivers ? fmt(rising) : '–', data.rivers ? `of ${fmt(data.rivers.stations.length)} gauges` : ''],
-            ['House prices', h ? euro(h.median) : '–', h ? `${pct(h.change)} on last year` : '']
+            ['House prices', h ? euro(h.median) : '–', h ? `${pct(h.change)} on last year` : ''],
+            ['On trolleys', tr ? fmt(tr.national.total) : '–', tr ? `at 8am ${(tr.reported || '').replace(/^08:00\s*/, '').replace(/\s*-\s*$/, '')} (HSE)` : ''],
+            ['Petrol · diesel', fuel ? `${euroL(fuel.petrol)} · ${euroL(fuel.diesel)}` : '–', fuel ? `per litre, week of ${dayName(fuel.date)}` : ''],
+            ['Unemployment', econ ? `${econ.unemployment.rate.toFixed(1)}%` : '–', econ ? `${monthName(econ.unemployment.month)}, was ${econ.unemployment.yearAgo?.toFixed(1)}%` : ''],
+            ['Inflation', econ ? `${econ.inflation.annual.toFixed(1)}%` : '–', econ ? `prices in the year to ${monthName(econ.inflation.month).split(' ')[0]}` : ''],
+            ['Air quality', worstAir ? worstAir[1].band : '–', worstAir ? `worst is ${nameOf(worstAir[0])}, index ${worstAir[1].aqi}` : ''],
+            ['Northern Lights', sp ? sp.aurora.text.split(':')[0].replace(/,.*/, '') : '–', sp ? `Kp ${sp.kp ?? '–'} now${sp.peakKp != null ? `, ${sp.peakKp} max next 24 hrs` : ''}` : '']
         ];
         document.getElementById('national').innerHTML = cards.map(([label, value, sub]) =>
             `<div class="stat"><div class="stat-label">${esc(label)}</div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div></div>`).join('');
@@ -337,6 +440,23 @@
     }
 
     const unavailable = '<p class="empty">Not available right now.</p>';
+
+    /** The county's own Met Éireann station (the first listed), or the nearest one to the county's middle. */
+    function stationFor(id, feature) {
+        const stations = data.observations?.stations || [];
+        const own = stations.find(s => s.county === id && s.temperature != null);
+        if (own) return own;
+        const c = L.geoJSON(feature).getBounds().getCenter();
+        const kx = Math.cos(c.lat * Math.PI / 180);
+        let best = null;
+        let bestD = Infinity;
+        for (const s of stations) {
+            if (s.temperature == null) continue;
+            const d = ((s.lon - c.lng) * kx) ** 2 + (s.lat - c.lat) ** 2;
+            if (d < bestD) { bestD = d; best = s; }
+        }
+        return best;
+    }
 
     function countyPanel(id) {
         const f = counties.find(x => x.properties.id === id);
@@ -355,10 +475,65 @@
 
         // Weather
         const we = data.weather?.counties?.[id];
+        const st = stationFor(id, f);
         html += section('Weather now', we ? `
             <div class="row"><span class="big">${esc(we.temperature.toFixed(1))}°C</span><span class="soft">${esc(we.description)}</span></div>
             <p class="soft">Wind ${esc(we.windSpeed)} km/h, gusts ${esc(we.windGust)} km/h</p>
-            <p class="muted">Today ${esc(we.todayMin.toFixed(0))}° to ${esc(we.todayMax.toFixed(0))}°, ${esc(we.todayRain.toFixed(1))} mm rain expected</p>` : unavailable);
+            <p class="muted">Today ${esc(we.todayMin.toFixed(0))}° to ${esc(we.todayMax.toFixed(0))}°, ${esc(we.todayRain.toFixed(1))} mm rain expected</p>
+            ${st ? `<p class="station">Measured at <strong>${esc(st.name)}</strong>${st.county !== id ? ` (nearest station, Co. ${esc(nameOf(st.county))})` : ''}:
+                ${esc(st.temperature ?? '–')}°C, wind ${esc(st.windKmh ?? '–')} km/h, ${esc(st.rainToday)} mm rain so far today <span class="muted">at ${esc(st.time)}</span></p>` : ''}` : unavailable,
+            st ? ['met.ie', 'https://www.met.ie/latest-reports/observations'] : null);
+
+        // Forecast
+        const fc = data.forecast?.counties?.[id];
+        if (fc?.length) {
+            html += section('Next few days', `<div class="forecast">${fc.map(d => `
+                <div class="fday"><div class="fday-name">${esc(dayName(d.date).split(' ')[0])}</div>
+                <div class="fday-temp">${esc(d.max)}°<span> / ${esc(d.min)}°</span></div>
+                <div class="fday-sum">${esc(d.summary || '')}</div>
+                <div class="muted">${esc(d.rain)} mm · gusts ${esc(d.gustKmh)}</div></div>`).join('')}</div>`, ['Met Éireann', 'https://www.met.ie/forecasts']);
+        }
+
+        // Air quality
+        const aq = data.airquality?.counties?.[id];
+        if (aq) {
+            html += section('Air quality', `
+                <div class="row"><span class="big">${esc(aq.band)}</span><span class="soft">European index ${esc(aq.aqi)}</span></div>
+                <p class="muted">PM2.5 ${esc(aq.pm25)} · PM10 ${esc(aq.pm10)} · NO₂ ${esc(aq.no2)} · ozone ${esc(aq.ozone)} µg/m³</p>
+                <p class="muted">Model estimate for the middle of the county. The EPA's measured readings are on airquality.ie.</p>`,
+                ['airquality.ie', 'https://airquality.ie/']);
+        }
+
+        // Hospitals
+        if (data.trolleys) {
+            const list = data.trolleys.hospitals.filter(x => x.county === id);
+            html += section('Hospital trolleys', list.length ? `
+                <ul class="list">${list.map(x => `<li>${esc(x.name)} <span class="pill ${x.total >= 15 ? 'bad' : x.total >= 5 ? 'warn' : 'down'}">${esc(x.total)} on trolleys</span>
+                    <span class="meta">${esc(x.ed)} in ED, ${esc(x.ward)} on wards</span></li>`).join('')}</ul>
+                <p class="muted">At 8am ${esc((data.trolleys.reported || '').replace(/^08:00\s*/, '').replace(/\s*-\s*$/, ''))}, HSE TrolleyGAR</p>`
+                : '<p class="soft">No hospital in this county reports trolley numbers.</p>', ['HSE', 'https://uec.hse.ie/uec/TGAR.php']);
+        }
+
+        // Jobs and new homes
+        const ec = data.economy?.counties?.[id];
+        if (ec) {
+            const homes = per1000(ec.newHomes, id);
+            html += section('Jobs and new homes', `
+                <div class="row"><span class="big">${esc(fmt(ec.liveRegister))}</span><span class="soft">on the Live Register</span>
+                ${ec.liveRegisterChange != null ? `<span class="pill ${ec.liveRegisterChange > 0 ? 'up' : 'down'}">${esc(pct(ec.liveRegisterChange))} on last year</span>` : ''}</div>
+                <p class="muted">${esc(monthName(data.economy.liveRegisterMonth))}. Includes part-time and casual workers, so it isn't the unemployment rate.</p>
+                <div class="row" style="margin-top:8px"><span class="big">${esc(fmt(ec.newHomes))}</span><span class="soft">new homes completed</span></div>
+                <p class="muted">${esc(data.economy.newHomesPeriod.replace(/(\d{4})Q(\d)/g, 'Q$2 $1'))}${homes != null ? ` · ${esc(homes.toFixed(1))} per 1,000 people` : ''}</p>`,
+                ['CSO', 'https://data.cso.ie/']);
+        }
+
+        // Earthquakes
+        const quakes = (data.earthquakes?.quakes || []).filter(q => q.county === id);
+        if (quakes.length) {
+            html += section(`Earthquakes in the last year (${quakes.length})`, `<ul class="list">${quakes.slice(0, 5).map(q => `
+                <li>Magnitude ${esc(q.magnitude)} <span class="meta">${esc(when(q.time))} · ${esc(q.depthKm)} km deep</span></li>`).join('')}</ul>
+                <p class="muted">Small tremors recorded by the Irish National Seismic Network; most are too small to feel.</p>`, ['INSN', 'https://www.insn.ie/']);
+        }
 
         // Water notices
         if (data.water) {
@@ -452,13 +627,102 @@
             return section(label, `<ul class="list">${rows.map(([id, v]) => `<li><a href="#" data-county="${id}">${esc(nameOf(id))}</a> <span class="meta">${esc(format(v))}</span></li>`).join('')}</ul>`);
         };
         return `<h2>All of Ireland</h2>
-            <p class="panel-intro">Click any county for its warnings, weather, water notices, rivers, beaches, house prices, population and TDs. Use the buttons above the map to colour the counties or show live points.</p>
+            <p class="panel-intro">Click any county for its warnings, weather and forecast, air quality, hospital trolleys, water notices, rivers, beaches, jobs, new homes, house prices, population and TDs. Use the buttons above the map to colour the counties or show live points.</p>
             ${section('Weather warnings', w.length ? w.map(x => `<div class="warning ${esc(x.level)}"><strong>${esc(x.headline)}</strong>
                 <span class="muted">until ${esc(when(x.expiry))}</span></div>`).join('') : '<p class="soft">No warnings in force.</p>', ['met.ie', 'https://www.met.ie/warnings'])}
             ${data.water ? ranked(id => { const c = data.water.counties[id]; return c ? c.active + c.upcoming : null; }, 'Most water notices', v => `${v} notices`) : ''}
             ${data.housing ? ranked(id => data.housing.counties[id]?.median, 'Highest house prices', euro) : ''}
             ${data.housing ? ranked(id => data.housing.counties[id]?.change, 'Fastest-rising prices', pct) : ''}
-            ${data.weather ? ranked(id => data.weather.counties[id]?.temperature, 'Warmest right now', v => `${v.toFixed(1)}°C`) : ''}`;
+            ${data.weather ? ranked(id => data.weather.counties[id]?.temperature, 'Warmest right now', v => `${v.toFixed(1)}°C`) : ''}
+            ${electricitySection()}
+            ${trolleySection()}
+            ${fuelSection()}
+            ${dailSection()}
+            ${spaceSection()}
+            ${quakeSection()}`;
+    }
+
+    // EirGrid times look like "31-Oct-2026 21:00:00"
+    const gridHour = t => String(t || '').slice(12, 17);
+
+    function electricitySection() {
+        const g = data.grid?.national;
+        if (!g?.day?.length) return '';
+        const first = g.day[0][0];
+        const last = g.day[g.day.length - 1][0];
+        return section('Electricity, last 24 hours', `
+            <p class="soft">Demand now <strong>${esc(fmt(g.demandMW))} MW</strong>, wind supplying <strong>${esc(g.windPercent)}%</strong>.
+            ${g.peakMW ? `Peak ${esc(fmt(g.peakMW))} MW at ${esc(gridHour(g.peakTime))}.` : ''}</p>
+            ${spark([
+                { values: g.day.map(r => r[1]), colour: '#3d7ea6', label: 'Demand' },
+                { values: g.day.map(r => r[2]), colour: '#1f8a5b', label: 'Wind' }
+            ], { labels: [gridHour(first), gridHour(last)], unit: ' MW', min: 0 })}
+            <p class="muted">All-island, megawatts. Carbon intensity ${esc(fmt(g.co2))} gCO₂/kWh.</p>`,
+            ['Smart Grid Dashboard', 'https://www.smartgriddashboard.com/']);
+    }
+
+    function trolleySection() {
+        const t = data.trolleys;
+        if (!t) return '';
+        return section('Most patients on trolleys', `
+            <p class="soft"><strong>${esc(fmt(t.national.total))}</strong> people waiting on trolleys at 8am
+            ${t.national.ed != null ? `(${esc(t.national.ed)} in emergency departments, ${esc(t.national.ward)} on wards)` : ''}</p>
+            <ul class="list">${t.hospitals.slice(0, 5).map(x => `<li>${x.county ? `<a href="#" data-county="${esc(x.county)}">${esc(x.name)}</a>` : esc(x.name)}
+                <span class="meta">${esc(x.total)}</span></li>`).join('')}</ul>
+            <p class="muted">${esc((t.reported || '').replace(/\s*-\s*$/, ''))} report. The HSE publishes on weekdays.</p>`,
+            ['HSE TrolleyGAR', 'https://uec.hse.ie/uec/TGAR.php']);
+    }
+
+    function fuelSection() {
+        const f = data.fuel?.national;
+        if (!f) return '';
+        const diff = (now, then) => then ? `${now >= then ? '+' : '−'}${Math.abs(Math.round((now - then) * 100))}c` : '';
+        return section('Fuel prices', `
+            <ul class="list">
+                <li>Petrol <strong>${esc(euroL(f.petrol))}</strong> <span class="meta">${esc(diff(f.petrol, f.yearAgo?.petrol))} on a year ago</span></li>
+                <li>Diesel <strong>${esc(euroL(f.diesel))}</strong> <span class="meta">${esc(diff(f.diesel, f.yearAgo?.diesel))} on a year ago</span></li>
+                ${f.heatingOil ? `<li>Home heating oil <strong>${esc(euroL(f.heatingOil))}</strong> <span class="meta">${esc(diff(f.heatingOil, f.yearAgo?.heatingOil))} on a year ago</span></li>` : ''}
+            </ul>
+            ${spark([
+                { values: f.history.map(r => r[1]), colour: '#c2410c', label: 'Petrol' },
+                { values: f.history.map(r => r[2]), colour: '#334155', label: 'Diesel' }
+            ], { labels: [dayName(f.history[0][0]), dayName(f.history[f.history.length - 1][0])], unit: ' €/l' })}
+            <p class="muted">National average per litre, week of ${esc(dayName(f.date))}. Prices vary from station to station.</p>`,
+            ['EU Oil Bulletin', 'https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en']);
+    }
+
+    function dailSection() {
+        const d = data.dail;
+        if (!d) return '';
+        const today = new Date().toISOString().slice(0, 10);
+        return section('In the Dáil', `
+            ${d.lastSitting ? `<p class="soft">Last sitting day, <a href="${esc(d.lastSitting.url)}" target="_blank" rel="noopener">${esc(dayName(d.lastSitting.date))}</a>:
+                ${esc(d.lastSitting.topics.slice(0, 8).join(', '))}</p>` : ''}
+            <ul class="list">${d.bills.slice(0, 6).map(b => `<li><a href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.title)}</a><br>
+                <span class="meta">${esc(b.stage || b.status)}${b.stageDate ? ` · ${b.stageDate > today ? 'scheduled for ' : ''}${esc(dayName(b.stageDate))}` : ''}${b.sponsor ? ` · ${esc(b.sponsor)}` : ''}</span></li>`).join('')}</ul>`,
+            ['oireachtas.ie', 'https://www.oireachtas.ie/en/bills/']);
+    }
+
+    function spaceSection() {
+        const s = data.space?.national;
+        if (!s) return '';
+        return section('Northern Lights', `
+            <p class="soft"><strong>${esc(s.aurora.text)}.</strong> The Kp index is ${esc(s.kp ?? '–')} now${s.peakKp != null ? ` and forecast to reach ${esc(s.peakKp)} in the next 24 hours` : ''}.
+            From Ireland you usually need Kp 6 or more, a clear sky and a dark northern horizon.</p>
+            ${spark([{ values: s.history.map(r => r[1]), colour: '#7c3aed', label: 'Kp, last 3 days' }], { labels: ['3 days ago', 'now'], min: 0 })}`,
+            ['NOAA SWPC', 'https://www.swpc.noaa.gov/products/planetary-k-index']);
+    }
+
+    function quakeSection() {
+        const q = data.earthquakes?.quakes;
+        if (!q) return '';
+        const biggest = q.reduce((best, x) => (x.magnitude ?? -9) > (best?.magnitude ?? -9) ? x : best, null);
+        return section('Earthquakes in the last year', q.length ? `
+            <p class="soft"><strong>${esc(q.length)}</strong> recorded in and around Ireland${biggest ? `, the largest magnitude ${esc(biggest.magnitude)} (${esc(biggest.region.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()))})` : ''}.</p>
+            <ul class="list">${q.slice(0, 4).map(x => `<li>Magnitude ${esc(x.magnitude)} ${x.county ? `near <a href="#" data-county="${esc(x.county)}">${esc(nameOf(x.county))}</a>` : `<span class="meta">${esc(x.region)}</span>`}
+                <span class="meta">${esc(when(x.time))}</span></li>`).join('')}</ul>
+            <p class="muted">Turn on Earthquakes above the map to see them all.</p>` : '<p class="soft">None recorded in the last year.</p>',
+            ['EMSC', 'https://www.seismicportal.eu/']);
     }
 
     function renderPanel() {

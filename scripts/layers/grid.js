@@ -44,6 +44,12 @@ async function fetchGrid() {
         .filter(r => demandAt.get(r.EffectiveTime))
         .map(r => [r.EffectiveTime, Math.round(100 * r.Value / demandAt.get(r.EffectiveTime))]);
 
+    // Last 24 hours of demand and wind output in MW, every 30 minutes (readings are every 15)
+    const windAt = new Map(wind.map(r => [r.EffectiveTime, r.Value]));
+    const day = demand.slice(-96).filter((_, i, all) => (all.length - 1 - i) % 2 === 0)
+        .map(r => [r.EffectiveTime, Math.round(r.Value), windAt.has(r.EffectiveTime) ? Math.round(windAt.get(r.EffectiveTime)) : null]);
+    const peak = demand.slice(-96).reduce((best, r) => (r.Value > (best?.Value ?? -1) ? r : best), null);
+
     return {
         updatedAt: new Date().toISOString(),
         source: SOURCE,
@@ -53,7 +59,10 @@ async function fetchGrid() {
             windMW: w?.Value ?? null,
             windPercent: w && d ? Math.round(100 * w.Value / d.Value) : null,
             co2: c?.Value ?? null,
-            windShare
+            windShare,
+            day,
+            peakMW: peak ? Math.round(peak.Value) : null,
+            peakTime: peak?.EffectiveTime || null
         }
     };
 }

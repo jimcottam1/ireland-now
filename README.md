@@ -2,7 +2,7 @@
 
 A clickable map of live public data for every county in Ireland, published as a static site on GitHub Pages.
 
-Search for any town, parish or island, click anywhere for its townland and Irish name, or click a county for its weather warnings, current weather, water notices, river levels, bathing waters, house prices, population and TDs. Colour the map by warnings, temperature, rain, house prices, price change, population density or water notices, and switch on live points for water notices, river gauges, tide gauges and trains.
+Search for any town, parish or island, click anywhere for its townland and Irish name, or click a county for its weather warnings, current and measured weather, 3-day forecast, air quality, hospital trolleys, water notices, river levels, bathing waters, jobs, new homes, house prices, population and TDs. The national view adds electricity, fuel prices, the Dáil, the Northern Lights outlook and earthquakes. Colour the map by warnings, temperature, rain, air quality, trolleys, new homes, house prices, price change, population density or water notices, and switch on live points for water notices, weather stations, river gauges, tide gauges, sea buoys, earthquakes, trains and buses.
 
 ## How it works
 
@@ -22,12 +22,22 @@ The `state/` folder carries over between runs in the GitHub Actions cache. It ho
 | --- | --- | --- |
 | Weather warnings | [Met Éireann](https://www.met.ie/warnings) open data | Hourly |
 | Weather now | [Open-Meteo](https://open-meteo.com/) at each county's centre | Hourly |
+| Weather measured | [Met Éireann observations](https://www.met.ie/latest-reports/observations) from 23 synoptic stations | Hourly |
+| Forecast | [Met Éireann forecast API](https://data.gov.ie/dataset/met-eireann-forecast-api) at each county's centre, next 3 days | Every 3 hours |
+| Air quality | [Open-Meteo air quality](https://open-meteo.com/en/docs/air-quality-api) (Copernicus CAMS model estimate, not EPA measurements) | Hourly |
+| Sea buoys | [Marine Institute](https://www.marine.ie/) weather buoy network (ERDDAP): waves, wind, sea temperature | Hourly |
+| Hospital trolleys | [HSE TrolleyGAR](https://uec.hse.ie/uec/TGAR.php) daily 8am report (read from the web page; weekdays) | Hourly check |
+| Northern Lights | [NOAA SWPC](https://www.swpc.noaa.gov/products/planetary-k-index) planetary Kp index and forecast | Hourly |
+| Earthquakes | [EMSC](https://www.seismicportal.eu/), including the Irish National Seismic Network's small quakes | Every 3 hours |
+| Fuel prices | [EU Weekly Oil Bulletin](https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en): national average petrol, diesel, heating oil | Daily (published weekly) |
+| Jobs, prices, new homes | [CSO](https://data.cso.ie/): unemployment (MUM01), inflation (CPM20), new homes (NDM01, NDQ05), Live Register by county (LRM15) | Daily |
+| Dáil activity | [Oireachtas API](https://api.oireachtas.ie/): latest sitting day and bills from the last month | Every 6 hours |
 | Water notices | [Uisce Éireann](https://www.water.ie/water-service-updates) public map layer | Hourly |
 | River levels | [OPW waterlevel.ie](https://waterlevel.ie/) | Hourly |
 | Tides | [Marine Institute](https://www.marine.ie/) tide gauge network (ERDDAP) | Hourly |
 | Trains | [Irish Rail realtime API](https://api.irishrail.ie/realtime/) | Hourly snapshot |
 | Buses | [NTA GTFS-Realtime](https://developer.nationaltransport.ie/) (needs the `NTA_API_KEY` repository secret; route names from the TFI timetable, weekly) | Hourly snapshot |
-| Electricity | [EirGrid Smart Grid Dashboard](https://www.smartgriddashboard.com/) | Hourly |
+| Electricity | [EirGrid Smart Grid Dashboard](https://www.smartgriddashboard.com/): demand, wind and carbon, with a 24-hour chart | Hourly |
 | Bathing waters | [EPA](https://data.epa.ie/) bathing water API | Daily |
 | TDs | [Oireachtas API](https://api.oireachtas.ie/) | Daily |
 | House prices | [Property Price Register](https://www.propertypriceregister.ie/) | Daily |
@@ -39,9 +49,9 @@ Map tiles © OpenStreetMap contributors.
 
 ## Not included (yet)
 
-- **Power cuts:** ESB Networks' PowerCheck API needs a subscription key.
-- **Hospital trolleys:** INMO publishes these through its website, not a public feed.
-- **Air quality:** the EPA's air quality site doesn't offer a public API.
+- **Power cuts:** ESB Networks has no public API. PowerCheck's backend uses a private key, so this waits on permission from ESB.
+- **Fuel prices by county or station:** there's no official source; the Oil Bulletin gives the national average only.
+- **Measured air quality:** the EPA's airquality.ie doesn't offer a public API, so the map uses model estimates.
 
 ## Local development
 
