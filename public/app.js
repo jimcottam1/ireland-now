@@ -444,7 +444,7 @@
             ['Northern Lights', sp ? sp.aurora.text.split(':')[0].replace(/,.*/, '') : '–', sp ? `Kp ${sp.kp ?? '–'} now${sp.peakKp != null ? `, ${sp.peakKp} max next 24 hrs` : ''}` : '', at(sp?.kpTime, 6, 'Kp reading')]
         ];
         document.getElementById('national').innerHTML = cards.map(([label, value, sub, note]) =>
-            `<div class="stat"><div class="stat-label">${esc(label)}${label === 'Northern Lights' && data.space ? ` ${kpHelp('right')}` : ''}</div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div>
+            `<div class="stat"><div class="stat-label">${esc(label)} ${cardHelp(label)}</div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div>
             ${note ? `<div class="stat-asof${note.old ? ' old' : ''}"${note.old ? ' title="Older than this source is usually updated"' : ''}>${note.old ? '⚠ ' : ''}${esc(note.text)}</div>` : ''}</div>`).join('');
     }
 
@@ -749,23 +749,157 @@
     // Round down, as NOAA does: Kp 4.67 ("5-") isn't yet a G1 storm
     const kpLevel = kp => KP_GUIDE.find(g => Math.floor(kp) <= g.max) || KP_GUIDE[KP_GUIDE.length - 1];
 
-    /** An ⓘ that shows what Kp numbers mean on hover, keyboard focus or tap. `align` is 'left' or 'right'. */
-    function kpHelp(align = 'right') {
+    /**
+     * An ⓘ that opens a help box on hover, keyboard focus or tap.
+     * intro and note are plain text; rows (optional) is a good-to-bad scale:
+     * [{ range, colour, name, text, now, next }], drawn like the Kp guide.
+     */
+    function help(title, { intro = '', rows = [], note = '' } = {}) {
+        return `<span class="help" tabindex="0" role="button" aria-label="${esc(title)}">ⓘ
+            <span class="help-box" role="tooltip">
+                <span class="kp-title">${esc(title)}</span>
+                ${intro ? `<span class="help-intro">${esc(intro)}</span>` : ''}
+                ${rows.length ? `<span class="kp-guide">${rows.map(r => `
+                    <span class="kp-row${r.now ? ' kp-now' : ''}">
+                        <span class="kp-num" style="background:${r.colour}">${esc(r.range)}</span>
+                        <span><strong>${esc(r.name)}</strong>${r.now ? ' <span class="pill warn">Now</span>' : ''}${r.next ? ' <span class="pill">Next 24 hrs</span>' : ''}
+                        ${r.text ? `<span class="meta">${esc(r.text)}</span>` : ''}</span>
+                    </span>`).join('')}</span>` : ''}
+                ${note ? `<span class="help-note">${esc(note)}</span>` : ''}
+            </span></span>`;
+    }
+
+    /** Mark the scale row a value falls in: rows have [min, max) bounds in `from`/`to`. */
+    const placeOn = (rows, value) => rows.map(r => ({ ...r, now: value != null && value >= r.from && value < r.to }));
+
+    function kpHelp() {
         const s = data.space?.national;
         const nowLevel = s?.kp != null ? kpLevel(s.kp) : null;
         const peakLevel = s?.peakKp != null ? kpLevel(s.peakKp) : null;
-        return `<span class="help help-${align}" tabindex="0" role="button" aria-label="What Kp numbers mean in Ireland">ⓘ
-            <span class="help-box" role="tooltip">
-                <span class="kp-title">What Kp numbers mean in Ireland</span>
-                <span class="kp-guide">${KP_GUIDE.map(g => `
-                    <span class="kp-row${g === nowLevel ? ' kp-now' : ''}">
-                        <span class="kp-num" style="background:${g.colour}">${g.min === g.max ? g.min : `${g.min}–${g.max}`}</span>
-                        <span><strong>${esc(g.name)}</strong>${g === nowLevel ? ' <span class="pill warn">Now</span>' : ''}${g === peakLevel && g !== nowLevel ? ' <span class="pill">Next 24 hrs</span>' : ''}
-                        <span class="meta">${esc(g.text)}</span></span>
-                    </span>`).join('')}</span>
-                <span class="help-note">Kp runs from 0 to 9 and measures how disturbed Earth's magnetic field is; the higher it is, the further south the aurora reaches.
-                Ireland usually needs Kp 5 or more, plus a clear sky, a dark spot and a view of the northern horizon. Phone cameras pick up colour the eye can't.</span>
-            </span></span>`;
+        return help('What Kp numbers mean in Ireland', {
+            rows: KP_GUIDE.map(g => ({
+                range: g.min === g.max ? String(g.min) : `${g.min}–${g.max}`, colour: g.colour, name: g.name, text: g.text,
+                now: g === nowLevel, next: g === peakLevel && g !== nowLevel
+            })),
+            note: "Kp runs from 0 to 9 and measures how disturbed Earth's magnetic field is; the higher it is, the further south the aurora reaches. "
+                + "Ireland usually needs Kp 5 or more, plus a clear sky, a dark spot and a view of the northern horizon. Phone cameras pick up colour the eye can't."
+        });
+    }
+
+    /** Help for each summary card, keyed by the card's label. */
+    function cardHelp(label) {
+        const g = data.grid?.national;
+        const econ = data.economy?.national;
+        const tr = data.trolleys?.national;
+        const worstAqi = data.airquality ? Math.max(...Object.values(data.airquality.counties).map(c => c.aqi ?? 0)) : null;
+        const top = ['red', 'orange', 'yellow'].find(l => (data.warnings?.warnings || []).some(x => x.level === l)) || 'none';
+        const GREEN = '#86efac', LIME = '#d9f99d', YELLOW = '#fde047', ORANGE = '#fdba74', RED = '#fca5a5', DARK = '#f87171', GREY = '#cbd5e1';
+
+        switch (label) {
+            case 'Weather warnings':
+                return help('Met Éireann weather warnings', {
+                    intro: 'Warnings in force now for anywhere in Ireland. Click a county to see its own.',
+                    rows: [
+                        { range: '–', colour: '#9fd3bd', name: 'None', text: 'No warnings in force', now: top === 'none' },
+                        { range: 'Y', colour: '#f2c418', name: 'Yellow', text: 'Be aware: weather that could cause local problems', now: top === 'yellow' },
+                        { range: 'O', colour: '#ef8a1f', name: 'Orange', text: 'Be prepared: significant disruption is likely', now: top === 'orange' },
+                        { range: 'R', colour: '#d7263d', name: 'Red', text: 'Take action: rare, dangerous weather. Follow official advice', now: top === 'red' }
+                    ]
+                });
+            case 'Wind power':
+                return help('Wind power', {
+                    intro: 'The share of electricity demand being met by wind right now, across the whole island (Ireland and Northern Ireland). Higher is better: less gas burned, lower emissions.',
+                    rows: placeOn([
+                        { from: 0, to: 15, range: '<15%', colour: GREY, name: 'Calm', text: 'Gas plants are doing most of the work' },
+                        { from: 15, to: 40, range: '15–40%', colour: LIME, name: 'Typical' },
+                        { from: 40, to: 60, range: '40–60%', colour: GREEN, name: 'Windy' },
+                        { from: 60, to: 101, range: '60%+', colour: '#4ade80', name: 'Very high', text: 'Close to the grid’s limit of about 75% wind and solar at any moment' }
+                    ], g?.windPercent),
+                    note: 'Carbon intensity is grams of CO₂ per kWh of electricity: roughly under 150 is low, over 350 is high.'
+                });
+            case 'Trains running':
+                return help('Trains running', {
+                    intro: 'Irish Rail trains moving right now, from Irish Rail’s live map. The number depends on the time of day: most at rush hour, few or none late at night.',
+                    note: '“Late” means 5 or more minutes behind the timetable, as Irish Rail reports it. Fewer late is better.'
+                });
+            case 'Buses tracked':
+                return help('Buses tracked', {
+                    intro: 'TFI buses sending their GPS position to the National Transport Authority right now: Dublin Bus, Bus Éireann, Go-Ahead and others. Like trains, the number follows the time of day.',
+                    note: '“Late” means 5 or more minutes behind the timetable at the next stop. Buses with no delay information aren’t counted as late.'
+                });
+            case 'Water notices':
+                return help('Water notices', {
+                    intro: 'Uisce Éireann notices in force now: boil water and do-not-drink notices, supply interruptions, low pressure and works. “More due” are planned ones starting in the next 7 days.',
+                    note: 'Boil water and do-not-drink notices are the serious ones. Turn on “Water notices” above the map to see where they are.'
+                });
+            case 'Rivers rising':
+                return help('Rivers rising', {
+                    intro: 'OPW river and lake gauges whose level has gone up over the last 6 hours. Fewer is better: many rising together usually follows heavy rain.',
+                    rows: [
+                        { range: '+10cm', colour: '#ef8a1f', name: 'Rising', text: '10 to 30 cm higher than 6 hours ago' },
+                        { range: '+30cm', colour: '#d7263d', name: 'Rising fast', text: '30 cm or more higher than 6 hours ago' }
+                    ],
+                    note: 'A rising river isn’t necessarily flooding. Check floodinfo.ie and your council for flood warnings.'
+                });
+            case 'House prices':
+                return help('House prices', {
+                    intro: 'The middle (median) price of homes sold at full market price in the last 12 months, from the Property Price Register, and how it compares with the 12 months before.',
+                    note: 'The register only shows a sale once it’s been filed, usually weeks after the sale closes, so the newest months are incomplete. Prices of new homes are shown without VAT.'
+                });
+            case 'On trolleys':
+                return help('Patients on trolleys', {
+                    intro: 'People admitted to hospital who are waiting for a bed, counted at 8am by the HSE: on trolleys in emergency departments or on extra trolleys on wards. Lower is better.',
+                    rows: [
+                        { range: '0–4', colour: GREEN, name: 'Low', text: 'For one hospital' },
+                        { range: '5–14', colour: YELLOW, name: 'Busy' },
+                        { range: '15+', colour: DARK, name: 'Overcrowded' }
+                    ],
+                    note: `${tr ? `Today’s ${tr.total} across all hospitals. ` : ''}The nurses’ union (INMO) publishes its own count, which is usually higher because it counts differently. The HSE reports on weekdays only.`
+                });
+            case 'Petrol · diesel':
+                return help('Fuel prices', {
+                    intro: 'The national average pump price per litre, including VAT, excise and carbon tax, as the Government reports it each Monday to the EU’s Weekly Oil Bulletin.',
+                    note: 'Prices vary from station to station, often by 10c or more. The panel on the right compares them with a year ago and shows home heating oil.'
+                });
+            case 'Unemployment':
+                return help('Unemployment rate', {
+                    intro: 'The share of people aged 15–74 who want work and are actively looking but don’t have a job (the international ILO definition), from the CSO each month, seasonally adjusted. Lower is better.',
+                    rows: placeOn([
+                        { from: 0, to: 5, range: '<5%', colour: GREEN, name: 'Very low', text: 'Close to full employment' },
+                        { from: 5, to: 8, range: '5–8%', colour: YELLOW, name: 'Moderate' },
+                        { from: 8, to: 12, range: '8–12%', colour: ORANGE, name: 'High' },
+                        { from: 12, to: 100, range: '12%+', colour: DARK, name: 'Very high', text: 'It peaked around 16% in 2012' }
+                    ], econ?.unemployment.rate),
+                    note: 'This isn’t the Live Register shown for each county, which also counts part-time and casual workers.'
+                });
+            case 'Inflation':
+                return help('Inflation', {
+                    intro: 'How much prices have risen in a year, measured by the CSO’s Consumer Price Index each month.',
+                    rows: placeOn([
+                        { from: -100, to: 0, range: '<0%', colour: GREY, name: 'Falling prices', text: 'Deflation, usually a sign of a weak economy' },
+                        { from: 0, to: 2.5, range: '0–2.5%', colour: GREEN, name: 'On target', text: 'The European Central Bank aims for 2%' },
+                        { from: 2.5, to: 5, range: '2.5–5%', colour: YELLOW, name: 'Above target' },
+                        { from: 5, to: 100, range: '5%+', colour: DARK, name: 'High', text: 'It peaked at over 9% in 2022' }
+                    ], econ?.inflation.annual)
+                });
+            case 'Air quality':
+                return help('Air quality', {
+                    intro: 'The European Air Quality Index for the worst county right now, from the Copernicus air quality model. It combines fine particles (PM2.5, PM10), nitrogen dioxide and ozone. Lower is better.',
+                    rows: placeOn([
+                        { from: 0, to: 20.5, range: '0–20', colour: '#50c1a8', name: 'Good' },
+                        { from: 20.5, to: 40.5, range: '20–40', colour: LIME, name: 'Fair' },
+                        { from: 40.5, to: 60.5, range: '40–60', colour: YELLOW, name: 'Moderate', text: 'Sensitive people may want to cut down on hard exercise outdoors' },
+                        { from: 60.5, to: 80.5, range: '60–80', colour: ORANGE, name: 'Poor' },
+                        { from: 80.5, to: 100.5, range: '80–100', colour: RED, name: 'Very poor' },
+                        { from: 100.5, to: 1e9, range: '100+', colour: '#a21caf', name: 'Extremely poor' }
+                    ], worstAqi),
+                    note: 'In Ireland it’s worst on cold, still evenings when smoke from solid fuel builds up in towns. These are model estimates; the EPA’s measured readings are on airquality.ie.'
+                });
+            case 'Northern Lights':
+                return kpHelp();
+            default:
+                return '';
+        }
     }
 
     // Help boxes are position: fixed so scrolling panels can't clip them; place each beside its ⓘ,
@@ -794,7 +928,7 @@
         const s = data.space?.national;
         if (!s) return '';
         return section('Northern Lights', `
-            <p class="soft"><strong>${esc(s.aurora.text)}.</strong> The Kp index is ${esc(s.kp ?? '–')} now${s.peakKp != null ? ` and forecast to reach ${esc(s.peakKp)} in the next 24 hours` : ''}. ${kpHelp('right')}</p>
+            <p class="soft"><strong>${esc(s.aurora.text)}.</strong> The Kp index is ${esc(s.kp ?? '–')} now${s.peakKp != null ? ` and forecast to reach ${esc(s.peakKp)} in the next 24 hours` : ''}. ${kpHelp()}</p>
             ${spark([{ values: s.history.map(r => r[1]), colour: '#7c3aed', label: 'Kp, last 3 days' }], { labels: ['3 days ago', 'now'], min: 0 })}`,
             ['NOAA SWPC', 'https://www.swpc.noaa.gov/products/planetary-k-index']);
     }

@@ -361,6 +361,7 @@ a { color: var(--brand); }
 .help:hover .help-box, .help:focus .help-box, .help:focus-within .help-box { display: block; }
 
 .kp-title { display: block; font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.help-intro { display: block; color: var(--ink-soft); margin-bottom: 6px; }
 .kp-guide { display: block; }
 .kp-row { display: flex; gap: 10px; align-items: flex-start; padding: 5px 6px; border-radius: 8px; }
 .kp-row.kp-now { background: var(--surface-2); outline: 1px solid var(--line); }
