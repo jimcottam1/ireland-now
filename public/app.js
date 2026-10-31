@@ -267,21 +267,43 @@
         return value == null ? '#d6dbd8' : ramp(v.stops.map(([s, c]) => [s, '#' + c]), value);
     }
 
+    let legendOpen = null;   // remembered while the page is open; null until first drawn
+
     function renderLegend() {
         const v = VIEWS[view];
         const el = document.getElementById('legend');
-        if (v.legend) { el.innerHTML = v.legend(); return; }
-        const gradient = v.stops.map(([, c], i) => `#${c} ${Math.round(100 * i / (v.stops.length - 1))}%`).join(', ');
-        el.innerHTML = `<div class="legend-title">${esc(v.title)}</div>
-            <div class="legend-ramp" style="background:linear-gradient(90deg, ${gradient})"></div>
-            <div class="legend-ends"><span>${esc(v.ends[0])}</span><span>${esc(v.ends[1])}</span></div>`;
+        let html;
+        if (v.legend) html = v.legend();
+        else {
+            const gradient = v.stops.map(([, c], i) => `#${c} ${Math.round(100 * i / (v.stops.length - 1))}%`).join(', ');
+            html = `<div class="legend-title">${esc(v.title)}</div>
+                <div class="legend-ramp" style="background:linear-gradient(90deg, ${gradient})"></div>
+                <div class="legend-ends"><span>${esc(v.ends[0])}</span><span>${esc(v.ends[1])}</span></div>`;
+        }
+        // A key for each dot layer that's switched on
+        const keys = Object.entries(DOT_KEYS).filter(([name]) => overlays[name]);
+        if (keys.length) {
+            html += `<details class="legend-dots"${keys.length <= 2 ? ' open' : ''}><summary>Dots on the map</summary>${keys.map(([name, rows]) => `
+                <div class="legend-sub">${esc(OVERLAYS[name].label)}</div>
+                ${rows.map(([colour, text, ring]) => `<div class="legend-row"><span class="legend-dot" style="background:${colour}${ring ? `;box-shadow:0 0 0 2px ${ring}` : ''}"></span>${esc(text)}</div>`).join('')}`).join('')}</details>`;
+        }
+        // On phones the key starts folded into a small "Key" button so it doesn't cover the map
+        if (legendOpen === null) legendOpen = !window.matchMedia('(max-width: 560px)').matches;
+        el.innerHTML = `<details class="legend-box"${legendOpen ? ' open' : ''}><summary>Key</summary>${html}</details>`;
+        el.querySelector('.legend-box').addEventListener('toggle', e => { legendOpen = e.target.open; });
     }
 
     // ---------- Map ----------
 
     // minZoom 5 so the whole island fits on a phone
     // Canvas rendering copes far better than SVG with ~700 bus markers
-    const map = L.map('map', { preferCanvas: true, zoomSnap: 0.25, minZoom: 5, maxZoom: 14, zoomControl: true }).setView([53.4, -8.0], 7);
+    // Touch screens: one finger scrolls the page, two fingers move and zoom the map (pinching pans too).
+    // Mouse: the scroll wheel only zooms once you've clicked the map, so scrolling the page doesn't get stuck.
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    const map = L.map('map', {
+        preferCanvas: true, zoomSnap: 0.25, minZoom: 5, maxZoom: 14, zoomControl: true,
+        scrollWheelZoom: false, dragging: !coarse, tap: false
+    }).setView([53.4, -8.0], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -300,7 +322,8 @@
     function restyle() {
         countyLayer?.setStyle(styleCounty);
         if (selected) countyLayer?.eachLayer(l => { if (l.feature.properties.id === selected) l.bringToFront(); });
-        Object.values(overlayLayers).forEach(l => l.bringToFront?.());
+        // Dots back on top of the (raised) selected county; layer groups have no bringToFront of their own
+        Object.values(overlayLayers).forEach(g => g.eachLayer?.(m => m.bringToFront?.()));
     }
 
     function drawCounties() {
@@ -317,18 +340,25 @@
                 layer.on({
                     mouseover: e => e.target.setStyle({ weight: 2.5, color: '#14211c' }),
                     mouseout: () => restyle(),
-                    click: e => { selectCounty(id); showTownland(e.latlng, id); }
+                    click: e => mapClick(e, id)
                 });
-            }
+            },
+            // The map's own click handler would otherwise run a second time for the same click
+            bubblingMouseEvents: false
         }).addTo(map);
         fitIreland();
     }
 
     // The controls above the map wrap differently by screen width, so measure the map after layout
+    // When the page opens on a shared link to a county, the first fit goes straight to that county
+    let firstFocus = null;
     function fitIreland() {
         requestAnimationFrame(() => {
             map.invalidateSize();
-            map.fitBounds(countyLayer.getBounds(), { padding: [10, 10] });
+            let bounds = countyLayer.getBounds();
+            if (firstFocus) countyLayer.eachLayer(l => { if (l.feature.properties.id === firstFocus) bounds = l.getBounds(); });
+            firstFocus = null;
+            map.fitBounds(bounds, { padding: [10, 10] });
         });
     }
 
@@ -337,6 +367,178 @@
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => map.invalidateSize(), 200);
     });
+
+    // ---------- Clicking and tapping the map ----------
+
+    // Popups keep clear of the zoom and ⟲/◎ buttons in the top-left corner
+    // On phones a popup must fit beside those buttons, so cap its width to the screen
+    const POPUP = { maxWidth: Math.min(320, window.innerWidth - 150), autoPanPaddingTopLeft: L.point(56, 12), autoPanPaddingBottomRight: L.point(12, 12) };
+
+    // How far from a dot (in screen pixels, beyond its own size) a click still counts as hitting it
+    const HIT_SLOP = coarse ? 14 : 7;
+
+    /** Every visible dot near a screen point, nearest first. */
+    function pointsNear(containerPoint) {
+        const found = [];
+        for (const [name, group] of Object.entries(overlayLayers)) {
+            if (!overlays[name] || !map.hasLayer(group)) continue;
+            group.eachLayer(m => {
+                if (!m.info) return;
+                const p = map.latLngToContainerPoint(m.getLatLng());
+                const reach = (m.getRadius ? m.getRadius() : 11) + HIT_SLOP;
+                const d = p.distanceTo(containerPoint);
+                if (d <= reach) found.push({ m, d, overlay: name });
+            });
+        }
+        return found.sort((a, b) => a.d - b.d);
+    }
+
+    function openPoint(m) {
+        L.popup(POPUP).setLatLng(m.getLatLng()).setContent(m.info.html).openOn(map);
+    }
+
+    let pickList = [];
+
+    /** One dot: open it. Several: a short list to choose from. None: the county (if any) underneath. */
+    function mapClick(e, countyId) {
+        const near = pointsNear(e.containerPoint);
+        if (near.length === 1) return openPoint(near[0].m);
+        if (near.length > 1) {
+            pickList = near.slice(0, 8).map(n => n.m);
+            L.popup(POPUP).setLatLng(e.latlng).setContent(`<div class="pick-title">${near.length} here, choose one</div>
+                <ul class="pick-list">${pickList.map((m, i) => `<li><button type="button" data-pick="${i}">
+                    <span class="dot" style="background:${m.info.colour}"></span><strong>${esc(m.info.title)}</strong>
+                    <span class="popup-meta">${esc(m.info.type)}</span></button></li>`).join('')}</ul>
+                ${near.length > 8 ? `<p class="popup-meta">and ${near.length - 8} more. Zoom in to separate them.</p>` : ''}`).openOn(map);
+            return;
+        }
+        if (countyId) {
+            selectCounty(countyId, { from: 'map' });
+            showTownland(e.latlng, countyId);
+        }
+    }
+    map.on('click', e => mapClick(e, null));   // clicks on the sea, e.g. near a buoy or offshore quake
+    map.on('popupopen', e => {
+        e.popup.getElement()?.addEventListener('click', ev => {
+            const b = ev.target.closest('[data-pick]');
+            if (b && pickList[b.dataset.pick]) openPoint(pickList[b.dataset.pick]);
+        });
+    });
+
+    /**
+     * Turn each overlay dot's popup into click-anywhere-near behaviour: keep its content, a title and
+     * colour for the pick list, and route its own clicks through mapClick (so a dot never selects the county).
+     */
+    function wireDots(group, label, fallbackColour) {
+        group.eachLayer(m => {
+            const popup = m.getPopup?.();
+            if (!popup) return;
+            const html = popup.getContent();
+            m.unbindPopup();
+            // The popup HTML is already escaped, so read the title back as plain text (it's escaped again when shown)
+            const strong = (String(html).match(/<strong>([\s\S]*?)<\/strong>/) || [])[1];
+            const title = strong ? new DOMParser().parseFromString(strong, 'text/html').body.textContent.trim() : label;
+            m.info = { html, title, type: label, colour: m.options.fillColor || fallbackColour };
+            if (m.options) m.options.bubblingMouseEvents = false;
+            m.on('click', ev => mapClick(ev, null));
+        });
+    }
+
+    // Scroll-wheel zoom only after the map is clicked; a hint explains when the wheel is ignored
+    const mapEl = document.getElementById('map');
+    const hint = L.DomUtil.create('div', 'map-hint', mapEl);
+    let hintTimer;
+    function showHint(text) {
+        hint.textContent = text;
+        hint.classList.add('show');
+        clearTimeout(hintTimer);
+        hintTimer = setTimeout(() => hint.classList.remove('show'), 1600);
+    }
+    map.on('click focus', () => map.scrollWheelZoom.enable());
+    mapEl.addEventListener('mouseleave', () => map.scrollWheelZoom.disable());
+    mapEl.addEventListener('wheel', () => { if (!map.scrollWheelZoom.enabled()) showHint('Click the map first to zoom with the scroll wheel'); }, { passive: true });
+    if (coarse) {
+        mapEl.addEventListener('touchmove', e => { if (e.touches.length === 1) showHint('Use two fingers to move the map'); }, { passive: true });
+    }
+
+    // ---------- Reset view and my location ----------
+
+    function resetView() {
+        map.closePopup();
+        placeMarker?.remove();
+        placeMarker = null;
+        fitIreland();
+    }
+
+    let youMarker = null;
+    function locateMe(button) {
+        if (!navigator.geolocation) return showHint('This browser can’t share your location');
+        button.classList.add('busy');
+        navigator.geolocation.getCurrentPosition(pos => {
+            button.classList.remove('busy');
+            const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+            const id = countyAtPoint(lon, lat);
+            if (!id) return showHint('You seem to be outside Ireland, so the map stays where it is');
+            youMarker?.remove();
+            youMarker = L.layerGroup([
+                L.circle([lat, lon], { radius: Math.min(accuracy, 3000), color: '#2563eb', weight: 1, fillOpacity: 0.08, interactive: false }),
+                L.circleMarker([lat, lon], { radius: 7, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1, interactive: false })
+            ]).addTo(map);
+            map.setView([lat, lon], 12);
+            selectCounty(id, { from: 'map' });
+            showTownland(L.latLng(lat, lon), id);
+        }, err => {
+            button.classList.remove('busy');
+            showHint(err.code === err.PERMISSION_DENIED ? 'Location is turned off for this site' : 'Couldn’t find your location just now');
+        }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+    }
+
+    /** Which county a point is in (outer rings only: county shapes have no holes worth worrying about). */
+    function countyAtPoint(lon, lat) {
+        const inRing = ring => {
+            let inside = false;
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const [xi, yi] = ring[i], [xj, yj] = ring[j];
+                if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+            }
+            return inside;
+        };
+        return counties.find(f => f.geometry.coordinates.some(rings => inRing(rings[0])))?.properties.id || null;
+    }
+
+    const MapButtons = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd() {
+            const box = L.DomUtil.create('div', 'leaflet-bar map-buttons');
+            box.innerHTML = `<a href="#" role="button" data-map="reset" title="Show the whole island" aria-label="Show the whole island">⟲</a>
+                <a href="#" role="button" data-map="locate" title="Show where I am (your location stays in your browser)" aria-label="Show where I am">◎</a>`;
+            L.DomEvent.disableClickPropagation(box);
+            L.DomEvent.on(box, 'click', e => {
+                const a = e.target.closest('[data-map]');
+                if (!a) return;
+                e.preventDefault();
+                if (a.dataset.map === 'reset') resetView(); else locateMe(a);
+            });
+            return box;
+        }
+    });
+    new MapButtons().addTo(map);
+
+    // On phones the panel sits below the map: after tapping a county, offer to go there instead of jumping
+    const viewBtn = L.DomUtil.create('button', 'map-view-county', mapEl);
+    viewBtn.type = 'button';
+    viewBtn.addEventListener('click', () => {
+        viewBtn.classList.remove('show');
+        document.getElementById('panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    L.DomEvent.disableClickPropagation(viewBtn);
+
+    /** Fit the map to one county */
+    function zoomToCounty(id) {
+        countyLayer?.eachLayer(l => {
+            if (l.feature.properties.id === id) map.flyToBounds(l.getBounds(), { padding: [24, 24], duration: 0.6 });
+        });
+    }
 
     // ---------- Overlays ----------
 
@@ -440,10 +642,25 @@
         }
     };
 
+    // What each dot colour means: [colour, label, optional ring colour]
+    const DOT_KEYS = {
+        water: [['#d7263d', 'Boil water / do not drink'], ['#ef8a1f', 'Restrictions'], ['#2f6fd6', 'Supply interruption'], ['#7c8b85', 'Works, other']],
+        stations: [['#6b4fbb', 'Temperature measured now']],
+        rivers: [['#d7263d', 'Rising fast (30 cm+ in 6 hrs)'], ['#ef8a1f', 'Rising (10 cm+)'], ['#3d7ea6', 'Steady'], ['#1f8a5b', 'Falling'], ['#7c8b85', 'Trend not known yet']],
+        tides: [['#fff', 'Tide gauge', '#1aa3a3']],
+        buoys: [['#f5d90a', 'Weather buoy', '#0e7490']],
+        quakes: [['#f97316', 'Bigger circle = bigger quake']],
+        trains: [['#1f8a5b', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late']],
+        buses: [['#c2410c', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late'], ['#7c8b85', 'No delay information']]
+    };
+
+    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus' };
+
     function drawOverlays() {
         for (const [name, def] of Object.entries(OVERLAYS)) {
             overlayLayers[name]?.remove();
             overlayLayers[name] = def.build();
+            wireDots(overlayLayers[name], DOT_NAMES[name] || def.label, def.colour);
             if (overlays[name]) overlayLayers[name].addTo(map);
         }
     }
@@ -468,11 +685,18 @@
             const key = o.dataset.overlay;
             overlays[key] = !overlays[key];
             overlays[key] ? overlayLayers[key].addTo(map) : overlayLayers[key].remove();
-            renderControls(); updateHash();
+            renderControls(); renderLegend(); updateHash();
+        }
+        if (e.target.closest('[data-cards]')) {
+            const open = document.getElementById('national').classList.contains('collapsed');
+            try { localStorage.setItem('cards-expanded', open ? '1' : '0'); } catch { /* private mode */ }
+            renderNational();
+            // The map's height depends on how much the cards take up
+            setTimeout(() => map.invalidateSize(), 50);
         }
         const c = e.target.closest('[data-county]');
-        if (c) { e.preventDefault(); selectCounty(c.dataset.county); }
-        if (e.target.closest('[data-back]')) { e.preventDefault(); selectCounty(null); }
+        if (c) { e.preventDefault(); selectCounty(c.dataset.county, { zoom: true, from: 'panel' }); }
+        if (e.target.closest('[data-back]')) { e.preventDefault(); selectCounty(null); resetView(); }
     });
 
     // Shareable links: #county=limerick&view=prices&show=water,rivers
@@ -541,9 +765,14 @@
             ['Air quality', worstAir ? worstAir[1].band : '–', worstAir ? `worst is ${nameOf(worstAir[0])}, index ${worstAir[1].aqi}` : '', at(data.airquality?.sourceTime, 3, 'Model estimate for')],
             ['Northern Lights', sp ? sp.aurora.text.split(':')[0].replace(/,.*/, '') : '–', sp ? `Kp ${sp.kp ?? '–'} now${sp.peakKp != null ? `, ${sp.peakKp} max next 24 hrs` : ''}` : '', at(sp?.kpTime, 6, 'Kp reading')]
         ];
-        document.getElementById('national').innerHTML = cards.map(([label, value, sub, note]) =>
+        let expanded = false;
+        try { expanded = localStorage.getItem('cards-expanded') === '1'; } catch { /* private mode */ }
+        const strip = document.getElementById('national');
+        strip.classList.toggle('collapsed', !expanded);
+        strip.innerHTML = cards.map(([label, value, sub, note]) =>
             `<div class="stat"><div class="stat-label">${esc(label)} ${cardHelp(label)}</div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div>
-            ${note ? `<div class="stat-asof${note.old ? ' old' : ''}"${note.old ? ' title="Older than this source is usually updated"' : ''}>${note.old ? '⚠ ' : ''}${esc(note.text)}</div>` : ''}</div>`).join('');
+            ${note ? `<div class="stat-asof${note.old ? ' old' : ''}"${note.old ? ' title="Older than this source is usually updated"' : ''}>${note.old ? '⚠ ' : ''}${esc(note.text)}</div>` : ''}</div>`).join('')
+            + `<button type="button" class="cards-toggle" data-cards aria-expanded="${expanded}">${expanded ? 'Show fewer ▴' : `Show all ${cards.length} ▾`}</button>`;
     }
 
     const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -1181,13 +1410,25 @@
         panel.scrollTop = 0;
     }
 
-    function selectCounty(id) {
+    /**
+     * opts.zoom: fit the map to the county (picked from the panel, a ranking or a shared link).
+     * opts.from 'map' or 'search': on phones, show a "View X" button over the map instead of scrolling away.
+     */
+    function selectCounty(id, opts = {}) {
         selected = id;
         renderPanel();
         restyle();
         updateHash();
-        if (id && window.matchMedia('(max-width: 860px)').matches) {
-            document.getElementById('panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (id && opts.zoom) zoomToCounty(id);
+        const narrow = window.matchMedia('(max-width: 860px)').matches;
+        viewBtn.classList.remove('show');
+        if (id && narrow) {
+            if (opts.from === 'map' || opts.from === 'search') {
+                viewBtn.textContent = `View ${nameOf(id)} ↓`;
+                viewBtn.classList.add('show');
+            } else if (opts.from === 'panel') {
+                document.getElementById('panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         }
     }
 
@@ -1246,7 +1487,7 @@
         }
         if (!best) return;
         const [id, , en, ga, , , parishEn, parishGa] = best;
-        L.popup({ autoPan: false })
+        L.popup({ ...POPUP, autoPan: window.matchMedia('(max-width: 560px)').matches })
             .setLatLng(latlng)
             .setContent(`<span class="popup-meta">Townland</span><br><strong>${esc(en)}</strong>${ga ? ` · <em>${esc(ga)}</em>` : ''}
                 ${parishEn ? `<br><span class="popup-meta">Civil parish of ${esc(parishEn)}${parishGa ? ` (${esc(parishGa)})` : ''}, Co. ${esc(nameOf(countyId))}</span>` : ''}
@@ -1295,7 +1536,7 @@
             .bindPopup(`<span class="popup-meta">${esc(CATEGORY_LABELS[cat] || '')}</span><br><strong>${esc(en)}</strong>${ga ? ` · <em>${esc(ga)}</em>` : ''}
                 <br><a href="${logainmLink(id)}" target="_blank" rel="noopener">History and pronunciation on logainm.ie</a>`)
             .openPopup();
-        if (county) selectCounty(county);
+        if (county) selectCounty(county, { from: 'search' });
     }
 
     searchBox.addEventListener('input', () => { searchMatches = searchPlaces(searchBox.value); renderResults(); });
@@ -1320,13 +1561,17 @@
         combineWater();
         status = statusRes?.ok ? await statusRes.json() : null;
 
+        // A shared link to a county opens zoomed to it
+        const startCounty = counties.some(f => f.properties.id === initialCounty) ? initialCounty : null;
+        firstFocus = startCounty;
+
         renderControls();
         renderLegend();
         drawCounties();
         drawOverlays();
         renderNational();
         renderMeta();
-        selectCounty(counties.some(f => f.properties.id === initialCounty) ? initialCounty : null);
+        selectCounty(startCounty);
     }
 
     // ---------- Keep an open page up to date ----------
@@ -1368,7 +1613,9 @@
         }
         renderControls();
         renderLegend();
-        selectCounty(counties.some(f => f.properties.id === county) ? county : null);
+        restyle();
+        const next = counties.some(f => f.properties.id === county) ? county : null;
+        if (next !== selected) selectCounty(next, { zoom: Boolean(next) });
     });
 
     start().catch(error => {
