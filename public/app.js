@@ -703,13 +703,36 @@
             ['oireachtas.ie', 'https://www.oireachtas.ie/en/bills/']);
     }
 
+    // What each Kp level means for seeing the aurora from Ireland (about 51.5–55.4°N)
+    const KP_GUIDE = [
+        { min: 0, max: 2, colour: '#94a3b8', name: 'Quiet', text: 'No chance from Ireland' },
+        { min: 3, max: 4, colour: '#cbd5e1', name: 'Unsettled', text: 'Very unlikely. Kp 4 can show a faint glow on camera from the far north coast' },
+        { min: 5, max: 5, colour: '#facc15', name: 'Minor storm (G1)', text: 'Possible on camera from northern coasts: Malin Head, north Mayo, Sligo' },
+        { min: 6, max: 6, colour: '#fb923c', name: 'Moderate storm (G2)', text: 'Often visible by eye in the north, on camera across the northern half' },
+        { min: 7, max: 7, colour: '#ef4444', name: 'Strong storm (G3)', text: 'Good chance across Ireland, by eye in the north and midlands' },
+        { min: 8, max: 9, colour: '#a21caf', name: 'Severe storm (G4–G5)', text: 'Visible everywhere, even in the south and in towns (May and October 2024 reached these)' }
+    ];
+    // Round down, as NOAA does: Kp 4.67 ("5-") isn't yet a G1 storm
+    const kpLevel = kp => KP_GUIDE.find(g => Math.floor(kp) <= g.max) || KP_GUIDE[KP_GUIDE.length - 1];
+
     function spaceSection() {
         const s = data.space?.national;
         if (!s) return '';
+        const nowLevel = s.kp != null ? kpLevel(s.kp) : null;
+        const peakLevel = s.peakKp != null ? kpLevel(s.peakKp) : null;
         return section('Northern Lights', `
-            <p class="soft"><strong>${esc(s.aurora.text)}.</strong> The Kp index is ${esc(s.kp ?? '–')} now${s.peakKp != null ? ` and forecast to reach ${esc(s.peakKp)} in the next 24 hours` : ''}.
-            From Ireland you usually need Kp 6 or more, a clear sky and a dark northern horizon.</p>
-            ${spark([{ values: s.history.map(r => r[1]), colour: '#7c3aed', label: 'Kp, last 3 days' }], { labels: ['3 days ago', 'now'], min: 0 })}`,
+            <p class="soft"><strong>${esc(s.aurora.text)}.</strong> The Kp index is ${esc(s.kp ?? '–')} now${s.peakKp != null ? ` and forecast to reach ${esc(s.peakKp)} in the next 24 hours` : ''}.</p>
+            ${spark([{ values: s.history.map(r => r[1]), colour: '#7c3aed', label: 'Kp, last 3 days' }], { labels: ['3 days ago', 'now'], min: 0 })}
+            <div class="kp-title">What the numbers mean in Ireland</div>
+            <ul class="kp-guide">${KP_GUIDE.map(g => `
+                <li class="${g === nowLevel ? 'kp-now' : ''}">
+                    <span class="kp-num" style="background:${g.colour}">${g.min === g.max ? g.min : `${g.min}–${g.max}`}</span>
+                    <span><strong>${esc(g.name)}</strong>${g === nowLevel ? ' <span class="pill warn">Now</span>' : ''}${g === peakLevel && g !== nowLevel ? ' <span class="pill">Next 24 hrs</span>' : ''}<br>
+                    <span class="meta">${esc(g.text)}</span></span>
+                </li>`).join('')}</ul>
+            <p class="muted">Kp runs from 0 to 9 and measures how disturbed Earth's magnetic field is; the higher it is, the further south the aurora reaches.
+            Ireland usually needs Kp 5 or more. A clear sky, a dark spot and a view of the northern horizon matter as much as the number.
+            Phone cameras pick up colour the eye can't.</p>`,
             ['NOAA SWPC', 'https://www.swpc.noaa.gov/products/planetary-k-index']);
     }
 
