@@ -16,6 +16,12 @@ There's no server or database. Each layer is a small script in `scripts/layers/`
 
 The `state/` folder carries over between runs in the GitHub Actions cache. It holds 48 hours of river level history (the OPW feed only gives the latest reading, so rising/falling is worked out here) and the slower layers, which are only refetched daily (beaches, TDs, house prices) or monthly (population).
 
+Every summary card and section says how old its figures are at the source (not when the site fetched them), and turns orange when a source is older than it should be. An open page checks for a new build every 10 minutes and updates itself.
+
+If a source fails on every build for more than 24 hours, `scripts/check-sources.js` opens a GitHub issue labelled `data-source`, and closes it when the source recovers.
+
+Measured weather (7 days per Met Éireann station) and river levels (48 hours per gauge) are kept in `state/` and published as small per-county files, so the county panels can show trend charts.
+
 ## Data sources
 
 | Layer | Source | Refreshed |
@@ -31,6 +37,10 @@ The `state/` folder carries over between runs in the GitHub Actions cache. It ho
 | Earthquakes | [EMSC](https://www.seismicportal.eu/), including the Irish National Seismic Network's small quakes | Every 3 hours |
 | Fuel prices | [EU Weekly Oil Bulletin](https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en): national average petrol, diesel, heating oil | Daily (published weekly) |
 | Jobs, prices, new homes | [CSO](https://data.cso.ie/): unemployment (MUM01), inflation (CPM20), new homes (NDM01, NDQ05), Live Register by county (LRM15) | Daily |
+| Rents | [RTB Rent Index](https://www.rtb.ie/data-insights/rtb-rent-index) via the CSO (RIQ02): average rent for new tenancies by county | Daily (published quarterly) |
+| Crime | [CSO recorded crime](https://data.cso.ie/table/CJQ10) by Garda division (CJQ10), published under reservation | Daily (published quarterly) |
+| Census profile | [CSO Census 2022](https://data.cso.ie/): age (F1020), Irish speakers (FY095), how people get to work (F7065) | Monthly |
+| Sunrise, sunset, moon | Calculated in the browser (standard astronomical formulas), no data source | Live |
 | Dáil activity | [Oireachtas API](https://api.oireachtas.ie/): latest sitting day and bills from the last month | Every 6 hours |
 | Water notices | [Uisce Éireann](https://www.water.ie/water-service-updates) public map layer | Hourly |
 | River levels | [OPW waterlevel.ie](https://waterlevel.ie/) | Hourly |

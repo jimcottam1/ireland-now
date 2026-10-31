@@ -81,7 +81,15 @@ async function fetchRivers() {
 
     // Newest reading from any gauge: how current the OPW feed itself is
     const sourceTime = stations.reduce((max, st) => (st.time > (max || '') ? st.time : max), null);
-    return { updatedAt: new Date().toISOString(), source: SOURCE, sourceTime, stations, counties };
+    // Each county's 48 hours of gauge readings, in a file per county the page loads when it's opened
+    const files = {};
+    for (const s of stations) {
+        if (!s.county || !history[s.ref]) continue;
+        const f = files[`rivers/${s.county}.json`] || (files[`rivers/${s.county}.json`] = {});
+        f[s.ref] = history[s.ref].map(([t, v]) => [t, Number(v.toFixed(3))]);
+    }
+
+    return { updatedAt: new Date().toISOString(), source: SOURCE, sourceTime, stations, counties, files };
 }
 
 module.exports = { fetchRivers };

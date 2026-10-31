@@ -336,6 +336,13 @@ a { color: var(--brand); }
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
+/* How old a section's figures are */
+.asof { font-size: 11.5px; color: var(--ink-faint); margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--line); }
+.asof.old { color: var(--orange); font-weight: 600; }
+.trend-slot:empty { display: none; }
+.trend-slot { margin-top: 8px; }
+.trend-title { font-size: 12px; font-weight: 600; color: var(--ink-soft); margin-top: 6px; }
+
 /* Hover help (ⓘ): shows on hover, keyboard focus or tap */
 .help { position: relative; display: inline-block; cursor: help; color: var(--brand); font-weight: 700; font-size: 13px; text-transform: none; letter-spacing: 0; line-height: 1; vertical-align: 0; }
 .help:focus { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 50%; }

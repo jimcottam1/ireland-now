@@ -2,6 +2,17 @@
 // The observations API takes a station slug and, for a slug it doesn't know, quietly answers with
 // Dublin Airport's readings, so every answer is checked against the station name we asked for.
 const { getJson } = require('../lib/http');
+const { dublinToIso } = require('../lib/time');
+const state = require('../lib/state');
+
+const HISTORY_DAYS = 7;
+
+/** "31-10-2026" + "20:00" (Irish time) -> ISO UTC */
+const reportTime = r => {
+    const [d, m, y] = String(r.date || '').split('-').map(Number);
+    const [hh, mm] = String(r.reportTime || '').split(':').map(Number);
+    return y && Number.isFinite(hh) ? dublinToIso(y, m, d, hh, mm || 0) : null;
+};
 
 const SOURCE = {
     name: 'Met Éireann weather observations',
@@ -53,6 +64,9 @@ async function station(slug, [name, lat, lon, county]) {
         id: slug,
         name,
         lat, lon, county,
+        // Every hourly report today, merged into a week of history in fetchObservations
+        today: mine.map(x => [reportTime(x), num(x.temperature), num(x.rainfall)]).filter(([t]) => t),
+        reportedAt: reportTime(r),
         time: r.reportTime,
         date: r.date,
         temperature: num(r.temperature),
@@ -72,11 +86,35 @@ async function fetchObservations() {
     const stations = results.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
     if (stations.length < 5) throw new Error(`Only ${stations.length} stations answered`);
 
+    // A week of hourly readings per station: [time, temperature °C, rain mm in the hour]. Each run
+    // brings all of today's reports, so a missed run fills itself in on the next one.
+    const history = state.read('observation-history', {});
+    const cutoff = new Date(Date.now() - HISTORY_DAYS * 86400000).toISOString();
+    for (const s of stations) {
+        const byTime = new Map((history[s.id] || []).map(row => [row[0], row]));
+        for (const row of s.today) byTime.set(row[0], row);
+        history[s.id] = [...byTime.values()].filter(([t]) => t >= cutoff).sort((a, b) => a[0].localeCompare(b[0]));
+        delete s.today;
+    }
+    for (const id of Object.keys(history)) if (!history[id].length || history[id][history[id].length - 1][0] < cutoff) delete history[id];
+    state.write('observation-history', history);
+
+    // Newest report from any station: how current Met Éireann's data is
+    const sourceTime = stations.reduce((max, s) => (s.reportedAt > (max || '') ? s.reportedAt : max), null);
+
     // Each county's own station(s); counties without one show their nearest station in the browser
     const counties = {};
     for (const s of stations) (counties[s.county] = counties[s.county] || []).push(s.id);
 
-    return { updatedAt: new Date().toISOString(), source: SOURCE, stations, counties };
+    return {
+        updatedAt: new Date().toISOString(),
+        source: SOURCE,
+        sourceTime,
+        stations,
+        counties,
+        // Loaded by the page only when a county is opened
+        files: { 'observations/history.json': history }
+    };
 }
 
 module.exports = { fetchObservations };

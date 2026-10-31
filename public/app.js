@@ -3,7 +3,7 @@
     'use strict';
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
-        'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames'];
+        'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
@@ -53,6 +53,73 @@
                 <span>${esc(labels[1] || '')}</span></figcaption>
             <div class="spark-range">Range ${esc(num(lo))}–${esc(num(hi))}${esc(unit)}</div>
         </figure>`;
+    }
+
+    // ---------- Sun and moon (calculated, no data source) ----------
+    // The standard low-precision formulas (as in the SunCalc library): accurate to a minute or two,
+    // which is plenty for sunrise, sunset and how much of the moon is lit.
+    const astro = (() => {
+        const rad = Math.PI / 180, dayMs = 864e5, J1970 = 2440588, J2000 = 2451545, e = rad * 23.4397;
+        const toDays = date => date.valueOf() / dayMs - 0.5 + J1970 - J2000;
+        const fromJulian = j => new Date((j + 0.5 - J1970) * dayMs);
+        const rightAscension = (l, b) => Math.atan2(Math.sin(l) * Math.cos(e) - Math.tan(b) * Math.sin(e), Math.cos(l));
+        const declination = (l, b) => Math.asin(Math.sin(b) * Math.cos(e) + Math.cos(b) * Math.sin(e) * Math.sin(l));
+        const meanAnomaly = d => rad * (357.5291 + 0.98560028 * d);
+        const eclipticLongitude = M => M + rad * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M)) + rad * 102.9372 + Math.PI;
+        const sunCoords = d => { const L = eclipticLongitude(meanAnomaly(d)); return { dec: declination(L, 0), ra: rightAscension(L, 0) }; };
+        const moonCoords = d => {
+            const L = rad * (218.316 + 13.176396 * d), M = rad * (134.963 + 13.064993 * d), F = rad * (93.272 + 13.229350 * d);
+            const l = L + rad * 6.289 * Math.sin(M), b = rad * 5.128 * Math.sin(F);
+            return { ra: rightAscension(l, b), dec: declination(l, b), dist: 385001 - 20905 * Math.cos(M) };
+        };
+
+        /** Times for one day at a place: angles in degrees below the horizon. NaN-dates mean it never happens. */
+        function sunTimes(date, lat, lng) {
+            const lw = rad * -lng, phi = rad * lat, d = toDays(date);
+            const n = Math.round(d - 0.0009 - lw / (2 * Math.PI));
+            const ds = 0.0009 + lw / (2 * Math.PI) + n;
+            const M = meanAnomaly(ds), L = eclipticLongitude(M), dec = declination(L, 0);
+            const Jnoon = J2000 + ds + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L);
+            const at = h => {
+                const w = Math.acos((Math.sin(h * rad) - Math.sin(phi) * Math.sin(dec)) / (Math.cos(phi) * Math.cos(dec)));
+                const Jset = J2000 + (0.0009 + (w + lw) / (2 * Math.PI) + n) + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L);
+                return { rise: fromJulian(Jnoon - (Jset - Jnoon)), set: fromJulian(Jset) };
+            };
+            const sun = at(-0.833), civil = at(-6), astronomical = at(-18);
+            return { noon: fromJulian(Jnoon), sunrise: sun.rise, sunset: sun.set, dusk: civil.set, dawn: civil.rise, night: astronomical.set, nightEnd: astronomical.rise };
+        }
+
+        /** fraction lit (0–1) and phase (0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter). */
+        function moon(date) {
+            const d = toDays(date), s = sunCoords(d), m = moonCoords(d), sdist = 149598000;
+            const phi = Math.acos(Math.sin(s.dec) * Math.sin(m.dec) + Math.cos(s.dec) * Math.cos(m.dec) * Math.cos(s.ra - m.ra));
+            const inc = Math.atan2(sdist * Math.sin(phi), m.dist - sdist * Math.cos(phi));
+            const angle = Math.atan2(Math.cos(s.dec) * Math.sin(s.ra - m.ra), Math.sin(s.dec) * Math.cos(m.dec) - Math.cos(s.dec) * Math.sin(m.dec) * Math.cos(s.ra - m.ra));
+            const phase = 0.5 + 0.5 * inc * (angle < 0 ? -1 : 1) / Math.PI;
+            const names = [[0.03, 'New moon'], [0.22, 'Waxing crescent'], [0.28, 'First quarter'], [0.47, 'Waxing gibbous'], [0.53, 'Full moon'],
+                [0.72, 'Waning gibbous'], [0.78, 'Last quarter'], [0.97, 'Waning crescent'], [1.01, 'New moon']];
+            return { fraction: (1 + Math.cos(inc)) / 2, phase, name: names.find(([max]) => phase <= max)[1] };
+        }
+
+        return { sunTimes, moon };
+    })();
+
+    const hhmm = d => d instanceof Date && !Number.isNaN(d.getTime())
+        ? d.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' }) : null;
+    const hoursMins = ms => `${Math.floor(ms / 3600000)} hr ${Math.round((ms % 3600000) / 60000)} min`;
+
+    /** Sun and moon for a place today: a short block of HTML. */
+    function skyHtml(lat, lng) {
+        const now = new Date();
+        const t = astro.sunTimes(now, lat, lng);
+        const m = astro.moon(now);
+        const dark = hhmm(t.night);
+        return `<div class="row"><span class="big">${esc(hhmm(t.sunrise))}</span><span class="soft">sunrise</span>
+                <span class="big">${esc(hhmm(t.sunset))}</span><span class="soft">sunset</span></div>
+            <p class="soft">${esc(hoursMins(t.sunset - t.sunrise))} of daylight · light until about ${esc(hhmm(t.dusk))}
+            · ${dark ? `fully dark from ${esc(dark)}` : 'it never gets fully dark tonight'}</p>
+            <p class="muted">${esc(m.name)}, ${esc(Math.round(m.fraction * 100))}% lit${m.fraction > 0.6 ? '. Bright moonlight washes out faint aurora and stars' : m.fraction < 0.25 ? '. Dark skies, good for stars and aurora' : ''}.
+            Calculated for today, not from a data feed.</p>`;
     }
 
     function ago(iso) {
@@ -149,6 +216,13 @@
             value: id => data.trolleys ? (data.trolleys.counties[id]?.total ?? null) : null,
             describe: v => v == null ? 'No acute hospital reporting' : `${v} patient${v === 1 ? '' : 's'} on trolleys`,
             ends: ['0', '35+'], title: 'Patients on trolleys at 8am (HSE TrolleyGAR)'
+        },
+        rent: {
+            label: 'Rent',
+            stops: [[1000, 'f1ecf7'], [1300, 'cdb7e6'], [1700, '9a72c9'], [2300, '552a8f']],
+            value: id => data.rents?.counties?.[id]?.rent,
+            describe: v => v == null ? 'No data' : `Average rent €${fmt(v)} a month`,
+            ends: ['€1,000', '€2,300+'], title: 'Average monthly rent, new tenancies (RTB)'
         },
         homes: {
             label: 'New homes',
@@ -475,6 +549,68 @@
 
     const unavailable = '<p class="empty">Not available right now.</p>';
 
+    // ---------- How old figures are ----------
+
+    /** A small "figures for … " line under a section; orange when older than the source usually is. */
+    const asOf = (text, old = false) => `<p class="asof${old ? ' old' : ''}"${old ? ' title="Older than this source is usually updated"' : ''}>${old ? '⚠ ' : ''}${esc(text)}</p>`;
+    const QUARTER_MONTHS = { 1: 'Jan–Mar', 2: 'Apr–Jun', 3: 'Jul–Sep', 4: 'Oct–Dec' };
+    /** "2025Q4" -> "Oct–Dec 2025" */
+    const quarterName = q => { const m = String(q || '').match(/^(\d{4})Q(\d)$/); return m ? `${QUARTER_MONTHS[m[2]]} ${m[1]}` : String(q || ''); };
+    /** Days since the end of a quarter like "2025Q4" */
+    const quarterAgeDays = q => {
+        const m = String(q || '').match(/^(\d{4})Q(\d)$/);
+        return m ? (Date.now() - Date.UTC(Number(m[1]), Number(m[2]) * 3, 1)) / 86400000 : 0;
+    };
+    const quarterSpan = (from, to) => {
+        const a = String(from).match(/^(\d{4})Q(\d)$/), b = String(to).match(/^(\d{4})Q(\d)$/);
+        if (!a || !b) return `${from} to ${to}`;
+        const M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${M[(a[2] - 1) * 3]} ${a[1]} to ${M[b[2] * 3 - 1]} ${b[1]}`;
+    };
+    const shortDate = iso => iso ? new Date(iso).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Dublin' }) : 'date unknown';
+
+    function censusHtml(id) {
+        const c = data.census?.counties?.[id];
+        if (!c) return '';
+        const years = Math.floor((Date.now() - new Date(data.census.censusDate)) / (365.25 * 86400000));
+        return `<ul class="list" style="margin-top:6px">
+                <li>Age <span class="meta">${esc(c.under15)}% under 15 · ${esc(c.over65)}% aged 65 and over</span></li>
+                <li>Irish <span class="meta">${esc(c.irishSpeakers)}% can speak Irish · ${esc(c.irishWell)}% speak it well or very well (aged 3+)</span></li>
+                <li>Getting to work <span class="meta">${esc(c.commuteCar)}% by car · ${esc(c.commutePublic)}% bus or train · ${esc(c.commuteActive)}% walk or cycle</span></li>
+            </ul>
+            ${asOf(`Census taken ${shortDate(data.census.censusDate)} (${years} years ago). The next census is due in 2027.`)}`;
+    }
+
+    // ---------- Trend charts, loaded when a county is opened ----------
+
+    const trendFiles = {};
+    const loadTrend = path => trendFiles[path] || (trendFiles[path] = fetch(`data/${path}`, { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null));
+    const dayLabel = iso => new Date(iso).toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', timeZone: 'Europe/Dublin' });
+
+    async function fillTrends() {
+        for (const slot of document.querySelectorAll('#panel .trend-slot')) {
+            if (slot.dataset.trend === 'station') {
+                const rows = (await loadTrend('observations/history.json'))?.[slot.dataset.station];
+                if (!rows || rows.length < 6) { slot.innerHTML = '<p class="muted">A week of readings builds up here over the next few days.</p>'; continue; }
+                // Rain per day, to read alongside the hourly temperature
+                const days = {};
+                for (const [t, , rain] of rows) { const d = t.slice(0, 10); days[d] = (days[d] || 0) + (rain || 0); }
+                const first = rows[0][0], last = rows[rows.length - 1][0];
+                slot.innerHTML = `<div class="trend-title">Measured at ${esc(slot.dataset.name)}, ${esc(rows.length >= 24 * 6 ? 'last 7 days' : 'since ' + dayLabel(first))}</div>
+                    ${spark([{ values: rows.map(r => r[1]), colour: '#c2410c', label: 'Temperature' }], { labels: [dayLabel(first), dayLabel(last)], unit: '°C' })}
+                    <p class="muted">Rain: ${Object.entries(days).slice(-7).map(([d, mm]) => `${dayLabel(d + 'T12:00:00Z').split(' ')[0]} ${mm.toFixed(1)}`).join(' · ')} mm</p>
+                    ${asOf(`Hourly readings to ${clock(last)}`, hoursOld(last) > 3)}`;
+            } else if (slot.dataset.trend === 'rivers') {
+                const file = await loadTrend(`rivers/${slot.dataset.county}.json`);
+                const gauges = (slot.dataset.refs || '').split(';').filter(Boolean).map(x => x.split('|'))
+                    .map(([ref, name]) => ({ name, rows: file?.[ref] || [] })).filter(g => g.rows.length >= 3);
+                slot.innerHTML = gauges.map(g => `<div class="trend-title">${esc(g.name)}, ${Math.round(hoursOld(g.rows[0][0])) <= 1 ? 'last hour' : `last ${esc(Math.round(hoursOld(g.rows[0][0])))} hours`}</div>
+                    ${spark([{ values: g.rows.map(r => r[1]), colour: '#3d7ea6', label: 'Level' }], { labels: [clock(g.rows[0][0]), clock(g.rows[g.rows.length - 1][0])], unit: ' m', height: 48 })}`).join('')
+                    + (gauges.length ? asOf(`Gauge readings to ${clock(gauges[0].rows[gauges[0].rows.length - 1][0])}`, hoursOld(gauges[0].rows[gauges[0].rows.length - 1][0]) > 3) : '');
+            }
+        }
+    }
+
     /** The county's own Met Éireann station (the first listed), or the nearest one to the county's middle. */
     function stationFor(id, feature) {
         const stations = data.observations?.stations || [];
@@ -515,7 +651,8 @@
             <p class="soft">Wind ${esc(we.windSpeed)} km/h, gusts ${esc(we.windGust)} km/h</p>
             <p class="muted">Today ${esc(we.todayMin.toFixed(0))}° to ${esc(we.todayMax.toFixed(0))}°, ${esc(we.todayRain.toFixed(1))} mm rain expected</p>
             ${st ? `<p class="station">Measured at <strong>${esc(st.name)}</strong>${st.county !== id ? ` (nearest station, Co. ${esc(nameOf(st.county))})` : ''}:
-                ${esc(st.temperature ?? '–')}°C, wind ${esc(st.windKmh ?? '–')} km/h, ${esc(st.rainToday)} mm rain so far today <span class="muted">at ${esc(st.time)}</span></p>` : ''}` : unavailable,
+                ${esc(st.temperature ?? '–')}°C, wind ${esc(st.windKmh ?? '–')} km/h, ${esc(st.rainToday)} mm rain so far today <span class="muted">at ${esc(st.time)}</span></p>
+            <div class="trend-slot" data-trend="station" data-station="${esc(st.id)}" data-name="${esc(st.name)}"></div>` : ''}` : unavailable,
             st ? ['met.ie', 'https://www.met.ie/latest-reports/observations'] : null);
 
         // Forecast
@@ -527,6 +664,10 @@
                 <div class="fday-sum">${esc(d.summary || '')}</div>
                 <div class="muted">${esc(d.rain)} mm · gusts ${esc(d.gustKmh)}</div></div>`).join('')}</div>`, ['Met Éireann', 'https://www.met.ie/forecasts']);
         }
+
+        // Sun and moon
+        const middle = L.geoJSON(f).getBounds().getCenter();
+        html += section('Daylight and moon', skyHtml(middle.lat, middle.lng));
 
         // Air quality
         const aq = data.airquality?.counties?.[id];
@@ -561,6 +702,22 @@
                 ['CSO', 'https://data.cso.ie/']);
         }
 
+        // Crime
+        if (data.crime?.counties?.[id]) {
+            const divs = data.crime.counties[id].map(i => data.crime.divisions[i]);
+            const p = data.crime.period;
+            const label = { assaults: 'Assaults', burglary: 'Burglary', theft: 'Theft', drugs: 'Drugs', damage: 'Criminal damage', publicOrder: 'Public order' };
+            html += section('Recorded crime', `${divs.map(d => `
+                <div class="constituency">${esc(d.name)} Garda division${d.counties.length > 1 ? ` <span class="muted">(${esc(d.counties.map(nameOf).join(', '))})</span>` : ''}</div>
+                <div class="row"><span class="big">${esc(fmt(d.total))}</span><span class="soft">crimes recorded in a year</span>
+                ${d.change != null ? `<span class="pill ${d.change > 0 ? 'up' : 'down'}">${esc(pct(d.change))}</span>` : ''}</div>
+                <p class="muted">${Object.entries(label).filter(([k]) => d.groups[k]).map(([k, l]) => `${l} ${fmt(d.groups[k])}`).join(' · ')}</p>`).join('')}
+                ${data.crime.changePeriod ? `<p class="muted">Change compares ${esc(quarterSpan(data.crime.changePeriod.from, data.crime.changePeriod.to))} with the same months a year earlier${data.crime.changePeriod.from !== p.from ? ' (the current divisions only start in 2025)' : ''}.</p>` : ''}
+                <p class="muted">The CSO publishes these figures "under reservation" because of concerns about how crime is recorded.</p>
+                ${asOf(`Figures for ${quarterSpan(p.from, p.to)}, published ${shortDate(data.crime.published)}`, quarterAgeDays(p.to) > 200)}`,
+                ['CSO', 'https://data.cso.ie/table/CJQ10']);
+        }
+
         // Earthquakes
         const quakes = (data.earthquakes?.quakes || []).filter(q => q.county === id);
         if (quakes.length) {
@@ -585,11 +742,18 @@
             const list = data.rivers.stations.filter(s => s.county === id);
             const known = list.filter(s => s.change != null).sort((a, b) => b.change - a.change);
             const rising = known.filter(s => s.trend.startsWith('rising'));
-            html += section(`Rivers (${list.length} gauges)`, !list.length ? '<p class="soft">No OPW gauges in this county.</p>'
-                : !known.length ? '<p class="soft">Rising and falling trends appear after a few hours of readings.</p>'
-                    : `<p class="soft">${rising.length ? `<strong>${rising.length}</strong> rising` : 'None rising'} in the last 6 hours.</p>
-                    <ul class="list">${known.slice(0, 5).map(s => `<li>${esc(s.name)} <span class="trend ${s.change > 0 ? 'up' : 'down'}">${s.change > 0 ? '+' : ''}${(s.change * 100).toFixed(0)} cm</span>
-                    <span class="meta">${esc(s.level.toFixed(2))} m</span></li>`).join('')}</ul>`, ['waterlevel.ie', 'https://waterlevel.ie/']);
+            let body;
+            if (!list.length) body = '<p class="soft">No OPW gauges in this county.</p>';
+            else if (!known.length) body = '<p class="soft">Rising and falling trends appear after a few hours of readings.</p>';
+            else body = `<p class="soft">${rising.length ? `<strong>${rising.length}</strong> rising` : 'None rising'} in the last 6 hours.</p>
+                <ul class="list">${known.slice(0, 5).map(s => `<li>${esc(s.name)} <span class="trend ${s.change > 0 ? 'up' : 'down'}">${s.change > 0 ? '+' : ''}${(s.change * 100).toFixed(0)} cm</span>
+                <span class="meta">${esc(s.level.toFixed(2))} m</span></li>`).join('')}</ul>`;
+            // Charts for the two gauges that moved most (or the first two, before trends are known)
+            if (list.length) {
+                const chartFor = (known.length ? [...known].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)) : list).slice(0, 2);
+                body += `<div class="trend-slot" data-trend="rivers" data-county="${esc(id)}" data-refs="${esc(chartFor.map(s => s.ref + '|' + s.name).join(';'))}"></div>`;
+            }
+            html += section(`Rivers (${list.length} gauges)`, body, ['waterlevel.ie', 'https://waterlevel.ie/']);
         }
 
         // Place names
@@ -622,6 +786,19 @@
             <span class="pill ${h.change > 0 ? 'up' : h.change < 0 ? 'down' : ''}">${esc(pct(h.change))} on last year</span></div>
             <p class="muted">Median of ${esc(fmt(h.sales))} sales in the last 12 months</p>` : unavailable, ['Property Price Register', 'https://www.propertypriceregister.ie/']);
 
+        // Rent
+        const rent = data.rents?.counties?.[id];
+        if (rent) {
+            const hist = rent.history.filter(([, v]) => v != null);
+            html += section('Rent', `
+                <div class="row"><span class="big">€${esc(fmt(rent.rent))}</span><span class="soft">a month on average</span>
+                ${rent.change != null ? `<span class="pill ${rent.change > 0 ? 'up' : 'down'}">${esc(pct(rent.change))} on a year earlier</span>` : ''}</div>
+                <p class="muted">New tenancies registered with the RTB, all property types and sizes.</p>
+                ${spark([{ values: hist.map(r => r[1]), colour: '#7c3aed', label: 'Average rent' }], { labels: [quarterName(hist[0][0]), quarterName(hist[hist.length - 1][0])], unit: ' €' })}
+                ${asOf(`Figures for ${quarterName(data.rents.quarter)}, published ${shortDate(data.rents.published)}`, quarterAgeDays(data.rents.quarter) > 270)}`,
+                ['RTB', 'https://www.rtb.ie/data-insights/rtb-rent-index']);
+        }
+
         // Beaches
         const bc = data.beaches?.counties?.[id];
         if (data.beaches) {
@@ -638,7 +815,8 @@
         const pop = data.population?.counties?.[id];
         html += section('People', pop ? `
             <div class="row"><span class="big">${esc(fmt(pop.population))}</span><span class="soft">people (Census 2022)</span></div>
-            <p class="muted">${esc(fmt(pop.density))} per km² · ${esc(fmt(pop.areaKm2))} km²</p>` : unavailable, ['CSO', 'https://data.cso.ie/table/FY003A']);
+            <p class="muted">${esc(fmt(pop.density))} per km² · ${esc(fmt(pop.areaKm2))} km²</p>
+            ${censusHtml(id)}` : unavailable, ['CSO', 'https://data.cso.ie/table/FY003A']);
 
         // TDs
         if (data.tds) {
@@ -667,6 +845,7 @@
             ${data.water ? ranked(id => { const c = data.water.counties[id]; return c ? c.active + c.upcoming : null; }, 'Most water notices', v => `${v} notices`) : ''}
             ${data.housing ? ranked(id => data.housing.counties[id]?.median, 'Highest house prices', euro) : ''}
             ${data.housing ? ranked(id => data.housing.counties[id]?.change, 'Fastest-rising prices', pct) : ''}
+            ${data.rents ? ranked(id => data.rents.counties[id]?.rent, 'Highest rents', v => `€${fmt(v)} a month`) + asOf(`RTB figures for ${quarterName(data.rents.quarter)}`, quarterAgeDays(data.rents.quarter) > 270) : ''}
             ${data.weather ? ranked(id => data.weather.counties[id]?.temperature, 'Warmest right now', v => `${v.toFixed(1)}°C`) : ''}
             ${electricitySection()}
             ${trolleySection()}
@@ -924,12 +1103,24 @@
     document.addEventListener('mouseover', placeHelp);
     document.addEventListener('focusin', placeHelp);
 
+    /** Darkness and moonlight tonight, for the middle of Ireland. */
+    function tonightHtml() {
+        const now = new Date();
+        const t = astro.sunTimes(now, 53.4, -7.9);
+        const m = astro.moon(now);
+        const dark = hhmm(t.night);
+        return `<p class="soft">Tonight: ${dark ? `fully dark from ${esc(dark)} to ${esc(hhmm(t.nightEnd) || '–')}` : 'the sky never gets fully dark at this time of year'}.
+            ${esc(m.name)}, ${esc(Math.round(m.fraction * 100))}% lit${m.fraction > 0.6 ? ', which will wash out fainter displays' : m.fraction < 0.25 ? ', so skies are dark' : ''}.</p>`;
+    }
+
     function spaceSection() {
         const s = data.space?.national;
         if (!s) return '';
         return section('Northern Lights', `
             <p class="soft"><strong>${esc(s.aurora.text)}.</strong> The Kp index is ${esc(s.kp ?? '–')} now${s.peakKp != null ? ` and forecast to reach ${esc(s.peakKp)} in the next 24 hours` : ''}. ${kpHelp()}</p>
-            ${spark([{ values: s.history.map(r => r[1]), colour: '#7c3aed', label: 'Kp, last 3 days' }], { labels: ['3 days ago', 'now'], min: 0 })}`,
+            ${spark([{ values: s.history.map(r => r[1]), colour: '#7c3aed', label: 'Kp, last 3 days' }], { labels: ['3 days ago', 'now'], min: 0 })}
+            ${tonightHtml()}
+            ${asOf(`Kp reading ${clock(s.kpTime)}`, hoursOld(s.kpTime) > 6)}`,
             ['NOAA SWPC', 'https://www.swpc.noaa.gov/products/planetary-k-index']);
     }
 
@@ -948,6 +1139,7 @@
     function renderPanel() {
         const panel = document.getElementById('panel');
         panel.innerHTML = selected ? countyPanel(selected) : nationalPanel();
+        if (selected) fillTrends();
         panel.scrollTop = 0;
     }
 
@@ -1096,6 +1288,34 @@
         renderMeta();
         selectCounty(counties.some(f => f.properties.id === initialCounty) ? initialCounty : null);
     }
+
+    // ---------- Keep an open page up to date ----------
+
+    const REFRESH_MINUTES = 10;
+
+    async function refresh() {
+        try {
+            const res = await fetch('data/status.json', { cache: 'no-cache' });
+            if (!res.ok) return;
+            const next = await res.json();
+            if (status && next.builtAt === status.builtAt) { renderMeta(); return; }   // nothing new; just update "x min ago"
+            await Promise.all(LAYERS.map(load));
+            status = next;
+            for (const k of Object.keys(trendFiles)) delete trendFiles[k];
+            const panel = document.getElementById('panel');
+            const scroll = panel.scrollTop;
+            drawOverlays();
+            restyle();
+            renderLegend();
+            renderNational();
+            renderMeta();
+            renderPanel();
+            panel.scrollTop = scroll;   // keep the reader's place
+        } catch { /* offline for a moment: try again next time */ }
+    }
+    setInterval(refresh, REFRESH_MINUTES * 60000);
+    // Browsers slow timers in background tabs, so check as soon as the tab is looked at again
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 
     // Following a link to another county or view on the same page
     window.addEventListener('hashchange', () => {

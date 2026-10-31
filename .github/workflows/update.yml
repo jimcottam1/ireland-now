@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +50,14 @@ jobs:
         with:
           path: state
           key: state-${{ github.run_id }}
+
+      # Open (or close) a GitHub issue when a source has been failing for over a day
+      - name: Check data sources
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-sources.js
 
       - uses: actions/upload-pages-artifact@v3
         with:
