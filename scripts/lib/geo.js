@@ -60,6 +60,9 @@ function countyAt(lon, lat) {
 }
 
 const COUNTY_IDS = counties.map(f => f.properties.id);
+// The 26 counties of the Republic and the 6 of Northern Ireland; most Irish public data covers only one
+const ROI_IDS = counties.filter(f => f.properties.jurisdiction !== 'ni').map(f => f.properties.id);
+const NI_IDS = counties.filter(f => f.properties.jurisdiction === 'ni').map(f => f.properties.id);
 
 /** "Co. Kilkenny", "KILKENNY", "Dún Laoghaire-Rathdown County Council" -> "kilkenny" / "dublin". */
 function countyFromName(text) {
@@ -68,6 +71,7 @@ function countyFromName(text) {
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
         .replace(/laoighis|leix/g, 'laois');
     if (/dublin|fingal|dun laoghaire|rathdown/.test(t)) return 'dublin';
+    if (/\bderry\b/.test(t)) return 'londonderry';
     return COUNTY_IDS.find(id => new RegExp(`\\b${id}\\b`).test(t)) || null;
 }
 
@@ -78,4 +82,4 @@ function countiesInName(text) {
     return COUNTY_IDS.filter(id => new RegExp(`\\b${id}\\b`).test(t));
 }
 
-module.exports = { counties, centroids, countyAt, countyFromName, countiesInName, COUNTY_IDS };
+module.exports = { counties, centroids, countyAt, countyFromName, countiesInName, COUNTY_IDS, ROI_IDS, NI_IDS };

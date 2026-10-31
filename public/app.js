@@ -3,7 +3,7 @@
     'use strict';
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
-        'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames'];
+        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
@@ -20,6 +20,22 @@
     const euro = n => n == null ? '–' : '€' + Math.round(n / 1000).toLocaleString('en-IE') + 'k';
     const pct = n => n == null ? '–' : (n > 0 ? '+' : '') + n.toFixed(1) + '%';
     const nameOf = id => counties?.find(f => f.properties.id === id)?.properties.name || id;
+
+    // Northern Ireland's six counties: most sources here cover the Republic only
+    const isNI = id => counties?.find(f => f.properties.id === id)?.properties.jurisdiction === 'ni';
+
+    /** Uisce Éireann and NI Water notices together, in one shape. Rebuilt whenever data loads. */
+    function combineWater() {
+        const notices = [...(data.water?.notices || []), ...(data.niwater?.notices || [])];
+        const byCounty = {};
+        for (const src of [data.water?.counties, data.niwater?.counties]) {
+            for (const [id, c] of Object.entries(src || {})) {
+                const t = byCounty[id] || (byCounty[id] = { active: 0, upcoming: 0, boilWater: 0, doNotDrink: 0 });
+                for (const k of Object.keys(t)) t[k] += c[k] || 0;
+            }
+        }
+        data.waterAll = data.water || data.niwater ? { notices, counties: byCounty } : null;
+    }
 
     const per1000 = (n, id) => {
         const pop = data.population?.counties?.[id]?.population;
@@ -159,23 +175,23 @@
 
     const VIEWS = {
         warnings: {
-            label: 'Warnings',
+            label: 'Warnings', allIsland: true,
             value: id => data.warnings?.counties?.[id]?.level || null,
             colour: v => WARNING_COLOURS[v] || '#9fd3bd',
             describe: v => v ? `${v[0].toUpperCase() + v.slice(1)} warning` : 'No warnings',
-            legend: () => `<div class="legend-title">Met Éireann warnings</div>`
+            legend: () => `<div class="legend-title">Weather warnings</div>`
                 + [['#9fd3bd', 'None'], [WARNING_COLOURS.yellow, 'Yellow'], [WARNING_COLOURS.orange, 'Orange'], [WARNING_COLOURS.red, 'Red']]
                     .map(([c, l]) => `<div class="legend-row"><span class="legend-swatch" style="background:${c}"></span>${l}</div>`).join('')
         },
         temperature: {
-            label: 'Temperature',
+            label: 'Temperature', allIsland: true,
             stops: [[-2, '2c5fd6'], [6, '7fb8e8'], [12, 'f4e3a1'], [18, 'f39a4a'], [26, 'c9302c']],
             value: id => data.weather?.counties?.[id]?.temperature,
             describe: v => v == null ? 'No data' : `${v.toFixed(1)}°C now`,
             ends: ['-2°C', '26°C'], title: 'Temperature now'
         },
         rain: {
-            label: 'Rain today',
+            label: 'Rain today', allIsland: true,
             stops: [[0, 'f1f6f9'], [2, 'b9d7ef'], [8, '5c9fd8'], [20, '1f4f9e']],
             value: id => data.weather?.counties?.[id]?.todayRain,
             describe: v => v == null ? 'No data' : `${v.toFixed(1)} mm rain today`,
@@ -204,7 +220,7 @@
             ends: ['20 /km²', '2,000 /km²'], title: 'Population density (Census 2022)'
         },
         air: {
-            label: 'Air quality',
+            label: 'Air quality', allIsland: true,
             stops: [[10, '50c1a8'], [30, 'e8d84d'], [50, 'ef8a1f'], [80, 'c9302c'], [100, '7d1d6b']],
             value: id => data.airquality?.counties?.[id]?.aqi,
             describe: v => v == null ? 'No data' : `Air quality ${aqiBand(v).toLowerCase()} (index ${v})`,
@@ -232,10 +248,10 @@
             ends: ['3', '14+ per 1,000'], title: 'New homes completed in the last year, per 1,000 people'
         },
         waterView: {
-            label: 'Water notices',
+            label: 'Water notices', allIsland: true,
             stops: [[0, 'eef4f8'], [1, 'bcd9ee'], [4, '5b9bd5'], [10, '1d4e89']],
             value: id => {
-                const c = data.water?.counties?.[id];
+                const c = data.waterAll?.counties?.[id];
                 return c ? c.active + c.upcoming : 0;
             },
             describe: v => `${v || 0} water notice${v === 1 ? '' : 's'}`,
@@ -292,7 +308,11 @@
             style: styleCounty,
             onEachFeature: (feature, layer) => {
                 const id = feature.properties.id;
-                layer.bindTooltip(() => `${esc(feature.properties.name)}<br><span class="popup-meta">${esc(VIEWS[view].describe(VIEWS[view].value(id)))}</span>`,
+                layer.bindTooltip(() => {
+                    const v = VIEWS[view].value(id);
+                    const text = v == null && isNI(id) && !VIEWS[view].allIsland ? 'Not covered in Northern Ireland' : VIEWS[view].describe(v);
+                    return `${esc(feature.properties.name)}<br><span class="popup-meta">${esc(text)}</span>`;
+                },
                     { sticky: true, className: 'county-tip', direction: 'top', offset: [0, -6] });
                 layer.on({
                     mouseover: e => e.target.setStyle({ weight: 2.5, color: '#14211c' }),
@@ -327,15 +347,19 @@
     const OVERLAYS = {
         water: {
             label: 'Water notices', colour: '#2f6fd6',
-            build: () => L.layerGroup((data.water?.notices || []).filter(n => n.lat != null).map(n =>
+            build: () => L.layerGroup((data.waterAll?.notices || []).filter(n => n.lat != null).map(n =>
                 L.circleMarker([n.lat, n.lon], {
                     radius: n.active ? 6 : 4.5, weight: 1.5, color: '#fff',
                     fillColor: WATER_COLOURS[n.kind] || '#2f6fd6', fillOpacity: n.active ? 0.95 : 0.55
                 }).bindPopup(`<strong>${esc(n.title)}</strong><br>
                     <span class="pill">${esc(WATER_LABELS[n.kind] || n.kind)}</span>${n.active ? '<span class="pill warn">Now</span>' : '<span class="pill">Upcoming</span>'}<br>
-                    <span class="popup-meta">${esc(when(n.start))} to ${esc(when(n.end))}</span>
+                    <span class="popup-meta">${n.issuer === 'NI Water'
+                        ? `Updated ${esc(when(n.updated))}${n.end ? ` · expected back ${esc(when(n.end))}` : ''}`
+                        : `${esc(when(n.start))} to ${esc(when(n.end))}`}</span>
                     <p style="margin-top:6px">${esc(n.description.slice(0, 280))}${n.description.length > 280 ? '…' : ''}</p>
-                    <a href="https://www.water.ie/water-service-updates" target="_blank" rel="noopener">Uisce Éireann updates</a>`)
+                    ${n.issuer === 'NI Water'
+                        ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">NI Water service updates</a>`
+                        : '<a href="https://www.water.ie/water-service-updates" target="_blank" rel="noopener">Uisce Éireann updates</a>'}`)
             ))
         },
         stations: {
@@ -477,7 +501,7 @@
         const top = ['red', 'orange', 'yellow'].find(l => w.some(x => x.level === l));
         const g = data.grid?.national;
         const t = data.trains?.national;
-        const water = data.water?.notices || [];
+        const water = data.waterAll?.notices || [];
         const rising = (data.rivers?.stations || []).filter(s => s.trend.startsWith('rising')).length;
         const h = data.housing?.national;
         const econ = data.economy?.national;
@@ -631,16 +655,26 @@
     function countyPanel(id) {
         const f = counties.find(x => x.properties.id === id);
         const p = f.properties;
+        const ni = isNI(id);
         let html = `<a href="#" data-back class="muted">← All of Ireland</a>
-            <h2 style="margin-top:6px">${esc(p.name)}</h2><div class="irish">${esc(p.irish)} · ${esc(p.province)}</div>`;
+            <h2 style="margin-top:6px">${esc(p.name)}</h2><div class="irish">${esc(p.irish)} · ${esc(p.province)}${ni ? ' · Northern Ireland' : ''}</div>`;
+
+        if (ni) {
+            html += `<p class="ni-note">Weather, forecasts, air quality, Met Office warnings, NI Water, earthquakes and daylight cover Northern Ireland here.
+                Most other sources on this site (CSO, HSE, property, TDs) cover the Republic only. For Northern Ireland see
+                <a href="https://www.nisra.gov.uk/" target="_blank" rel="noopener">NISRA</a>,
+                <a href="https://www.nidirect.gov.uk/" target="_blank" rel="noopener">nidirect</a> and
+                <a href="https://www.translink.co.uk/" target="_blank" rel="noopener">Translink</a>.</p>`;
+        }
 
         // Warnings
         if (data.warnings) {
             const list = data.warnings.warnings.filter(w => w.counties.includes(id));
             html += section('Weather warnings', list.length ? list.map(w => `
                 <div class="warning ${esc(w.level)}"><strong>${esc(w.headline)}</strong>
-                <span class="muted">${esc(when(w.onset))} to ${esc(when(w.expiry))}</span>
-                <p>${esc(w.description)}</p></div>`).join('') : '<p class="soft">No warnings in force.</p>', ['met.ie', 'https://www.met.ie/warnings']);
+                <span class="muted">${esc(when(w.onset))}${w.expiry ? ` to ${esc(when(w.expiry))}` : ''} · ${esc(w.issuer || 'Met Éireann')}</span>
+                <p>${esc(w.description)}</p></div>`).join('') : '<p class="soft">No warnings in force.</p>',
+                ni ? ['Met Office', 'https://www.metoffice.gov.uk/weather/warnings-and-advice/uk-warnings'] : ['met.ie', 'https://www.met.ie/warnings']);
         }
 
         // Weather
@@ -680,7 +714,7 @@
         }
 
         // Hospitals
-        if (data.trolleys) {
+        if (data.trolleys && !ni) {
             const list = data.trolleys.hospitals.filter(x => x.county === id);
             html += section('Hospital trolleys', list.length ? `
                 <ul class="list">${list.map(x => `<li>${esc(x.name)} <span class="pill ${x.total >= 15 ? 'bad' : x.total >= 5 ? 'warn' : 'down'}">${esc(x.total)} on trolleys</span>
@@ -727,18 +761,19 @@
         }
 
         // Water notices
-        if (data.water) {
-            const list = data.water.notices.filter(n => n.county === id).sort((a, b) => b.active - a.active || a.start.localeCompare(b.start));
+        if (data.waterAll) {
+            const list = data.waterAll.notices.filter(n => n.county === id).sort((a, b) => b.active - a.active || a.start.localeCompare(b.start));
             html += section(`Water notices (${list.length})`, list.length ? `<ul class="list">${list.slice(0, 8).map(n => `
                 <li><strong>${esc(n.title)}</strong><br>
                 <span class="pill">${esc(WATER_LABELS[n.kind] || n.kind)}</span>${n.active ? '<span class="pill warn">Now</span>' : ''}
-                <span class="meta">${esc(when(n.start))} to ${esc(when(n.end))}</span></li>`).join('')}</ul>
+                <span class="meta">${n.issuer === 'NI Water' ? `updated ${esc(when(n.updated))}${n.end ? `, expected back ${esc(when(n.end))}` : ''}` : `${esc(when(n.start))} to ${esc(when(n.end))}`}</span></li>`).join('')}</ul>
                 ${list.length > 8 ? `<p class="muted">and ${list.length - 8} more</p>` : ''}` : '<p class="soft">No current or upcoming notices.</p>',
-                ['water.ie', 'https://www.water.ie/water-service-updates']);
+                ni ? ['NI Water', 'https://www.niwater.com/whats-happening-in-your-area/current-service-updates'] : ['water.ie', 'https://www.water.ie/water-service-updates']);
         } else html += section('Water notices', unavailable);
 
         // Rivers
-        if (data.rivers) {
+        // OPW gauges are in the Republic (a few sit on the border); skip the section in NI counties without one
+        if (data.rivers && !(ni && !data.rivers.stations.some(s => s.county === id))) {
             const list = data.rivers.stations.filter(s => s.county === id);
             const known = list.filter(s => s.change != null).sort((a, b) => b.change - a.change);
             const rising = known.filter(s => s.trend.startsWith('rising'));
@@ -766,7 +801,7 @@
         }
 
         // Public transport right now
-        if (data.buses || data.trains) {
+        if ((data.buses || data.trains) && !ni) {
             const buses = (data.buses?.buses || []).filter(b => b.county === id);
             const trains = (data.trains?.trains || []).filter(t => t.county === id);
             const routes = Object.entries(buses.reduce((acc, b) => (acc[b.route] = (acc[b.route] || 0) + 1, acc), {}))
@@ -781,7 +816,7 @@
 
         // House prices
         const h = data.housing?.counties?.[id];
-        html += section('House prices', h ? `
+        if (!ni) html += section('House prices', h ? `
             <div class="row"><span class="big">${esc(euro(h.median))}</span>
             <span class="pill ${h.change > 0 ? 'up' : h.change < 0 ? 'down' : ''}">${esc(pct(h.change))} on last year</span></div>
             <p class="muted">Median of ${esc(fmt(h.sales))} sales in the last 12 months</p>` : unavailable, ['Property Price Register', 'https://www.propertypriceregister.ie/']);
@@ -801,7 +836,7 @@
 
         // Beaches
         const bc = data.beaches?.counties?.[id];
-        if (data.beaches) {
+        if (data.beaches && !ni) {
             const list = data.beaches.beaches.filter(b => b.county === id);
             html += section(`Bathing waters (${list.length})`, !list.length ? '<p class="soft">No designated bathing waters.</p>' : `
                 <p class="soft">${bc.blueFlag} Blue Flag · ${bc.excellent} excellent${bc.poor ? ` · <strong>${bc.poor} poor</strong>` : ''}${bc.restricted ? ` · ${bc.restricted} with restrictions` : ''}</p>
@@ -813,13 +848,16 @@
 
         // People
         const pop = data.population?.counties?.[id];
-        html += section('People', pop ? `
+        if (!ni) html += section('People', pop ? `
             <div class="row"><span class="big">${esc(fmt(pop.population))}</span><span class="soft">people (Census 2022)</span></div>
             <p class="muted">${esc(fmt(pop.density))} per km² · ${esc(fmt(pop.areaKm2))} km²</p>
             ${censusHtml(id)}` : unavailable, ['CSO', 'https://data.cso.ie/table/FY003A']);
 
         // TDs
-        if (data.tds) {
+        if (ni) {
+            html += section('Representatives', `<p class="soft">Northern Ireland elects MPs to Westminster and MLAs to the Northern Ireland Assembly, not TDs.</p>`,
+                ['niassembly.gov.uk', 'https://www.niassembly.gov.uk/']);
+        } else if (data.tds) {
             const list = data.tds.tds.filter(t => t.counties.includes(id));
             const byConstituency = list.reduce((acc, t) => ((acc[t.constituency] = acc[t.constituency] || []).push(t), acc), {});
             html += section(`TDs (${list.length})`, Object.entries(byConstituency).map(([con, members]) => `
@@ -842,7 +880,7 @@
             <p class="panel-intro">Click any county for its warnings, weather and forecast, air quality, hospital trolleys, water notices, rivers, beaches, jobs, new homes, house prices, population and TDs. Use the buttons above the map to colour the counties or show live points.</p>
             ${section('Weather warnings', w.length ? w.map(x => `<div class="warning ${esc(x.level)}"><strong>${esc(x.headline)}</strong>
                 <span class="muted">until ${esc(when(x.expiry))}</span></div>`).join('') : '<p class="soft">No warnings in force.</p>', ['met.ie', 'https://www.met.ie/warnings'])}
-            ${data.water ? ranked(id => { const c = data.water.counties[id]; return c ? c.active + c.upcoming : null; }, 'Most water notices', v => `${v} notices`) : ''}
+            ${data.waterAll ? ranked(id => { const c = data.waterAll.counties[id]; return c ? c.active + c.upcoming : null; }, 'Most water notices', v => `${v} notices`) : ''}
             ${data.housing ? ranked(id => data.housing.counties[id]?.median, 'Highest house prices', euro) : ''}
             ${data.housing ? ranked(id => data.housing.counties[id]?.change, 'Fastest-rising prices', pct) : ''}
             ${data.rents ? ranked(id => data.rents.counties[id]?.rent, 'Highest rents', v => `€${fmt(v)} a month`) + asOf(`RTB figures for ${quarterName(data.rents.quarter)}`, quarterAgeDays(data.rents.quarter) > 270) : ''}
@@ -977,7 +1015,7 @@
         switch (label) {
             case 'Weather warnings':
                 return help('Met Éireann weather warnings', {
-                    intro: 'Warnings in force now for anywhere in Ireland. Click a county to see its own.',
+                    intro: 'Warnings in force now anywhere on the island: Met Éireann for the Republic, the Met Office for Northern Ireland (its amber is shown as orange). Click a county to see its own.',
                     rows: [
                         { range: '–', colour: '#9fd3bd', name: 'None', text: 'No warnings in force', now: top === 'none' },
                         { range: 'Y', colour: '#f2c418', name: 'Yellow', text: 'Be aware: weather that could cause local problems', now: top === 'yellow' },
@@ -1003,12 +1041,12 @@
                 });
             case 'Buses tracked':
                 return help('Buses tracked', {
-                    intro: 'TFI buses sending their GPS position to the National Transport Authority right now: Dublin Bus, Bus Éireann, Go-Ahead and others. Like trains, the number follows the time of day.',
+                    intro: 'Republic of Ireland only. TFI buses sending their GPS position to the National Transport Authority right now: Dublin Bus, Bus Éireann, Go-Ahead and others. Like trains, the number follows the time of day.',
                     note: '“Late” means 5 or more minutes behind the timetable at the next stop. Buses with no delay information aren’t counted as late.'
                 });
             case 'Water notices':
                 return help('Water notices', {
-                    intro: 'Uisce Éireann notices in force now: boil water and do-not-drink notices, supply interruptions, low pressure and works. “More due” are planned ones starting in the next 7 days.',
+                    intro: 'Uisce Éireann notices in the Republic and NI Water incidents in Northern Ireland, in force now: boil water and do-not-drink notices, supply interruptions, low pressure and works. “More due” are planned ones starting in the next 7 days.',
                     note: 'Boil water and do-not-drink notices are the serious ones. Turn on “Water notices” above the map to see where they are.'
                 });
             case 'Rivers rising':
@@ -1022,12 +1060,12 @@
                 });
             case 'House prices':
                 return help('House prices', {
-                    intro: 'The middle (median) price of homes sold at full market price in the last 12 months, from the Property Price Register, and how it compares with the 12 months before.',
+                    intro: 'Republic of Ireland only. The middle (median) price of homes sold at full market price in the last 12 months, from the Property Price Register, and how it compares with the 12 months before.',
                     note: 'The register only shows a sale once it’s been filed, usually weeks after the sale closes, so the newest months are incomplete. Prices of new homes are shown without VAT.'
                 });
             case 'On trolleys':
                 return help('Patients on trolleys', {
-                    intro: 'People admitted to hospital who are waiting for a bed, counted at 8am by the HSE: on trolleys in emergency departments or on extra trolleys on wards. Lower is better.',
+                    intro: 'Republic of Ireland only. People admitted to hospital who are waiting for a bed, counted at 8am by the HSE: on trolleys in emergency departments or on extra trolleys on wards. Lower is better.',
                     rows: [
                         { range: '0–4', colour: GREEN, name: 'Low', text: 'For one hospital' },
                         { range: '5–14', colour: YELLOW, name: 'Busy' },
@@ -1037,12 +1075,12 @@
                 });
             case 'Petrol · diesel':
                 return help('Fuel prices', {
-                    intro: 'The national average pump price per litre, including VAT, excise and carbon tax, as the Government reports it each Monday to the EU’s Weekly Oil Bulletin.',
+                    intro: 'Republic of Ireland only. The national average pump price per litre, including VAT, excise and carbon tax, as the Government reports it each Monday to the EU’s Weekly Oil Bulletin.',
                     note: 'Prices vary from station to station, often by 10c or more. The panel on the right compares them with a year ago and shows home heating oil.'
                 });
             case 'Unemployment':
                 return help('Unemployment rate', {
-                    intro: 'The share of people aged 15–74 who want work and are actively looking but don’t have a job (the international ILO definition), from the CSO each month, seasonally adjusted. Lower is better.',
+                    intro: 'Republic of Ireland only. The share of people aged 15–74 who want work and are actively looking but don’t have a job (the international ILO definition), from the CSO each month, seasonally adjusted. Lower is better.',
                     rows: placeOn([
                         { from: 0, to: 5, range: '<5%', colour: GREEN, name: 'Very low', text: 'Close to full employment' },
                         { from: 5, to: 8, range: '5–8%', colour: YELLOW, name: 'Moderate' },
@@ -1053,7 +1091,7 @@
                 });
             case 'Inflation':
                 return help('Inflation', {
-                    intro: 'How much prices have risen in a year, measured by the CSO’s Consumer Price Index each month.',
+                    intro: 'Republic of Ireland only. How much prices have risen in a year, measured by the CSO’s Consumer Price Index each month.',
                     rows: placeOn([
                         { from: -100, to: 0, range: '<0%', colour: GREY, name: 'Falling prices', text: 'Deflation, usually a sign of a weak economy' },
                         { from: 0, to: 2.5, range: '0–2.5%', colour: GREEN, name: 'On target', text: 'The European Central Bank aims for 2%' },
@@ -1063,7 +1101,7 @@
                 });
             case 'Air quality':
                 return help('Air quality', {
-                    intro: 'The European Air Quality Index for the worst county right now, from the Copernicus air quality model. It combines fine particles (PM2.5, PM10), nitrogen dioxide and ozone. Lower is better.',
+                    intro: 'The European Air Quality Index for the worst of all 32 counties right now, from the Copernicus air quality model. It combines fine particles (PM2.5, PM10), nitrogen dioxide and ozone. Lower is better.',
                     rows: placeOn([
                         { from: 0, to: 20.5, range: '0–20', colour: '#50c1a8', name: 'Good' },
                         { from: 20.5, to: 40.5, range: '20–40', colour: LIME, name: 'Fair' },
@@ -1164,6 +1202,7 @@
 
         const sources = LAYERS.map(n => data[n]?.source).filter(Boolean);
         sources.push({ name: 'Tailte Éireann county boundaries', url: 'https://data-osi.opendata.arcgis.com/', licence: 'CC BY 4.0' });
+        sources.push({ name: 'OSNI county boundaries (Northern Ireland)', url: 'https://www.spatialni.gov.uk/', licence: 'Open Government Licence' });
         document.getElementById('footer').innerHTML = `<strong>Data sources</strong> · refreshed every hour, slower datasets daily
             <ul>${sources.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a> (${esc(s.licence)})</li>`).join('')}</ul>
             <p style="margin-top:8px">Ireland Now is an independent project and isn't affiliated with any of these organisations.</p>`;
@@ -1278,6 +1317,7 @@
             ...LAYERS.map(load)
         ]);
         counties = (await countyRes.json()).features;
+        combineWater();
         status = statusRes?.ok ? await statusRes.json() : null;
 
         renderControls();
@@ -1300,6 +1340,7 @@
             const next = await res.json();
             if (status && next.builtAt === status.builtAt) { renderMeta(); return; }   // nothing new; just update "x min ago"
             await Promise.all(LAYERS.map(load));
+            combineWater();
             status = next;
             for (const k of Object.keys(trendFiles)) delete trendFiles[k];
             const panel = document.getElementById('panel');

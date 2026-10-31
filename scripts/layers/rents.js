@@ -1,7 +1,7 @@
 // RTB average monthly rent for new tenancies, by county, published through the CSO (table RIQ02).
 // The RTB index lags: figures for a quarter usually appear four to five months after it ends.
 const { fetchCso, cube } = require('../lib/jsonstat');
-const { COUNTY_IDS } = require('../lib/geo');
+const { ROI_IDS: COUNTY_IDS } = require('../lib/geo');   // the RTB covers the Republic only
 
 const SOURCE = {
     name: 'RTB Rent Index via CSO (RIQ02)',

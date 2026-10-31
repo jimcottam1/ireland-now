@@ -336,6 +336,8 @@ a { color: var(--brand); }
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
+.ni-note { font-size: 12.5px; color: var(--ink-soft); background: var(--surface-2); border-radius: 8px; padding: 8px 10px; margin: 8px 0 4px; }
+
 /* How old a section's figures are */
 .asof { font-size: 11.5px; color: var(--ink-faint); margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--line); }
 .asof.old { color: var(--orange); font-weight: 600; }

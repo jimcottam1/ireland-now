@@ -1,6 +1,8 @@
 # Ireland Now
 
-A clickable map of live public data for every county in Ireland, published as a static site on GitHub Pages.
+A clickable map of live public data for all 32 counties on the island of Ireland, published as a static site on GitHub Pages.
+
+Northern Ireland's six counties get weather, forecasts, air quality, Met Office warnings, NI Water incidents, earthquakes, electricity (EirGrid is all-island) and daylight. Sources that only cover the Republic (CSO, HSE, Property Price Register, RTB, TDs and so on) are left out of their panels and show as "not covered" on the map.
 
 Search for any town, parish or island, click anywhere for its townland and Irish name, or click a county for its weather warnings, current and measured weather, 3-day forecast, air quality, hospital trolleys, water notices, river levels, bathing waters, jobs, new homes, house prices, population and TDs. The national view adds electricity, fuel prices, the Dáil, the Northern Lights outlook and earthquakes. Colour the map by warnings, temperature, rain, air quality, trolleys, new homes, house prices, price change, population density or water notices, and switch on live points for water notices, weather stations, river gauges, tide gauges, sea buoys, earthquakes, trains and buses.
 
@@ -26,7 +28,7 @@ Measured weather (7 days per Met Éireann station) and river levels (48 hours pe
 
 | Layer | Source | Refreshed |
 | --- | --- | --- |
-| Weather warnings | [Met Éireann](https://www.met.ie/warnings) open data | Hourly |
+| Weather warnings | [Met Éireann](https://www.met.ie/warnings) open data; [Met Office](https://www.metoffice.gov.uk/weather/warnings-and-advice/uk-warnings) RSS for Northern Ireland | Hourly |
 | Weather now | [Open-Meteo](https://open-meteo.com/) at each county's centre | Hourly |
 | Weather measured | [Met Éireann observations](https://www.met.ie/latest-reports/observations) from 23 synoptic stations | Hourly |
 | Forecast | [Met Éireann forecast API](https://data.gov.ie/dataset/met-eireann-forecast-api) at each county's centre, next 3 days | Every 3 hours |
@@ -42,6 +44,7 @@ Measured weather (7 days per Met Éireann station) and river levels (48 hours pe
 | Census profile | [CSO Census 2022](https://data.cso.ie/): age (F1020), Irish speakers (FY095), how people get to work (F7065) | Monthly |
 | Sunrise, sunset, moon | Calculated in the browser (standard astronomical formulas), no data source | Live |
 | Dáil activity | [Oireachtas API](https://api.oireachtas.ie/): latest sitting day and bills from the last month | Every 6 hours |
+| NI Water incidents | [NI Water current service updates](https://www.niwater.com/whats-happening-in-your-area/current-service-updates) (read from the page; robots.txt allows it) | Hourly |
 | Water notices | [Uisce Éireann](https://www.water.ie/water-service-updates) public map layer | Hourly |
 | River levels | [OPW waterlevel.ie](https://waterlevel.ie/) | Hourly |
 | Tides | [Marine Institute](https://www.marine.ie/) tide gauge network (ERDDAP) | Hourly |
@@ -53,7 +56,7 @@ Measured weather (7 days per Met Éireann station) and river levels (48 hours pe
 | House prices | [Property Price Register](https://www.propertypriceregister.ie/) | Daily |
 | Population | [CSO](https://data.cso.ie/table/FY003A) Census 2022 | Monthly |
 | Place names | [Logainm](https://www.logainm.ie/) (needs the `LOGAINM_API_KEY` repository secret): 55,000 townlands, towns, parishes, baronies and islands, for the search box and click-for-townland | Monthly |
-| County boundaries | [Tailte Éireann](https://data-osi.opendata.arcgis.com/) (simplified, in `public/data/`) | Fixed |
+| County boundaries | [Tailte Éireann](https://data-osi.opendata.arcgis.com/) for the Republic, [OSNI Open Data](https://www.spatialni.gov.uk/) (Open Government Licence) for Northern Ireland; simplified, in `public/data/` | Fixed |
 
 Map tiles © OpenStreetMap contributors.
 
