@@ -444,7 +444,7 @@
             ['Northern Lights', sp ? sp.aurora.text.split(':')[0].replace(/,.*/, '') : '–', sp ? `Kp ${sp.kp ?? '–'} now${sp.peakKp != null ? `, ${sp.peakKp} max next 24 hrs` : ''}` : '', at(sp?.kpTime, 6, 'Kp reading')]
         ];
         document.getElementById('national').innerHTML = cards.map(([label, value, sub, note]) =>
-            `<div class="stat"><div class="stat-label">${esc(label)}</div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div>
+            `<div class="stat"><div class="stat-label">${esc(label)}${label === 'Northern Lights' && data.space ? ` ${kpHelp('right')}` : ''}</div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div>
             ${note ? `<div class="stat-asof${note.old ? ' old' : ''}"${note.old ? ' title="Older than this source is usually updated"' : ''}>${note.old ? '⚠ ' : ''}${esc(note.text)}</div>` : ''}</div>`).join('');
     }
 
@@ -749,24 +749,53 @@
     // Round down, as NOAA does: Kp 4.67 ("5-") isn't yet a G1 storm
     const kpLevel = kp => KP_GUIDE.find(g => Math.floor(kp) <= g.max) || KP_GUIDE[KP_GUIDE.length - 1];
 
+    /** An ⓘ that shows what Kp numbers mean on hover, keyboard focus or tap. `align` is 'left' or 'right'. */
+    function kpHelp(align = 'right') {
+        const s = data.space?.national;
+        const nowLevel = s?.kp != null ? kpLevel(s.kp) : null;
+        const peakLevel = s?.peakKp != null ? kpLevel(s.peakKp) : null;
+        return `<span class="help help-${align}" tabindex="0" role="button" aria-label="What Kp numbers mean in Ireland">ⓘ
+            <span class="help-box" role="tooltip">
+                <span class="kp-title">What Kp numbers mean in Ireland</span>
+                <span class="kp-guide">${KP_GUIDE.map(g => `
+                    <span class="kp-row${g === nowLevel ? ' kp-now' : ''}">
+                        <span class="kp-num" style="background:${g.colour}">${g.min === g.max ? g.min : `${g.min}–${g.max}`}</span>
+                        <span><strong>${esc(g.name)}</strong>${g === nowLevel ? ' <span class="pill warn">Now</span>' : ''}${g === peakLevel && g !== nowLevel ? ' <span class="pill">Next 24 hrs</span>' : ''}
+                        <span class="meta">${esc(g.text)}</span></span>
+                    </span>`).join('')}</span>
+                <span class="help-note">Kp runs from 0 to 9 and measures how disturbed Earth's magnetic field is; the higher it is, the further south the aurora reaches.
+                Ireland usually needs Kp 5 or more, plus a clear sky, a dark spot and a view of the northern horizon. Phone cameras pick up colour the eye can't.</span>
+            </span></span>`;
+    }
+
+    // Help boxes are position: fixed so scrolling panels can't clip them; place each beside its ⓘ,
+    // kept inside the window (phones pin them across the screen in CSS instead)
+    function placeHelp(e) {
+        const help = e.target.closest?.('.help');
+        if (!help || window.innerWidth <= 560) return;
+        const box = help.querySelector('.help-box');
+        const icon = help.getBoundingClientRect();
+        box.style.visibility = 'hidden';
+        box.style.display = 'block';
+        const w = box.offsetWidth;
+        const h = box.offsetHeight;
+        box.style.display = '';
+        box.style.visibility = '';
+        const left = Math.min(Math.max(8, icon.right - w), window.innerWidth - w - 8);
+        const below = icon.bottom + 6;
+        const top = below + h > window.innerHeight - 8 ? Math.max(8, icon.top - h - 6) : below;
+        box.style.left = `${left}px`;
+        box.style.top = `${top}px`;
+    }
+    document.addEventListener('mouseover', placeHelp);
+    document.addEventListener('focusin', placeHelp);
+
     function spaceSection() {
         const s = data.space?.national;
         if (!s) return '';
-        const nowLevel = s.kp != null ? kpLevel(s.kp) : null;
-        const peakLevel = s.peakKp != null ? kpLevel(s.peakKp) : null;
         return section('Northern Lights', `
-            <p class="soft"><strong>${esc(s.aurora.text)}.</strong> The Kp index is ${esc(s.kp ?? '–')} now${s.peakKp != null ? ` and forecast to reach ${esc(s.peakKp)} in the next 24 hours` : ''}.</p>
-            ${spark([{ values: s.history.map(r => r[1]), colour: '#7c3aed', label: 'Kp, last 3 days' }], { labels: ['3 days ago', 'now'], min: 0 })}
-            <div class="kp-title">What the numbers mean in Ireland</div>
-            <ul class="kp-guide">${KP_GUIDE.map(g => `
-                <li class="${g === nowLevel ? 'kp-now' : ''}">
-                    <span class="kp-num" style="background:${g.colour}">${g.min === g.max ? g.min : `${g.min}–${g.max}`}</span>
-                    <span><strong>${esc(g.name)}</strong>${g === nowLevel ? ' <span class="pill warn">Now</span>' : ''}${g === peakLevel && g !== nowLevel ? ' <span class="pill">Next 24 hrs</span>' : ''}<br>
-                    <span class="meta">${esc(g.text)}</span></span>
-                </li>`).join('')}</ul>
-            <p class="muted">Kp runs from 0 to 9 and measures how disturbed Earth's magnetic field is; the higher it is, the further south the aurora reaches.
-            Ireland usually needs Kp 5 or more. A clear sky, a dark spot and a view of the northern horizon matter as much as the number.
-            Phone cameras pick up colour the eye can't.</p>`,
+            <p class="soft"><strong>${esc(s.aurora.text)}.</strong> The Kp index is ${esc(s.kp ?? '–')} now${s.peakKp != null ? ` and forecast to reach ${esc(s.peakKp)} in the next 24 hours` : ''}. ${kpHelp('right')}</p>
+            ${spark([{ values: s.history.map(r => r[1]), colour: '#7c3aed', label: 'Kp, last 3 days' }], { labels: ['3 days ago', 'now'], min: 0 })}`,
             ['NOAA SWPC', 'https://www.swpc.noaa.gov/products/planetary-k-index']);
     }
 

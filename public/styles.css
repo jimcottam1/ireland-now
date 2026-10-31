@@ -336,12 +336,37 @@ a { color: var(--brand); }
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-.kp-title { font-weight: 700; font-size: 13px; margin: 10px 0 4px; }
-.kp-guide { list-style: none; }
-.kp-guide li { display: flex; gap: 10px; align-items: flex-start; padding: 6px; border-radius: 8px; }
-.kp-guide li.kp-now { background: var(--surface-2); outline: 1px solid var(--line); }
+/* Hover help (ⓘ): shows on hover, keyboard focus or tap */
+.help { position: relative; display: inline-block; cursor: help; color: var(--brand); font-weight: 700; font-size: 13px; text-transform: none; letter-spacing: 0; line-height: 1; vertical-align: 0; }
+.help:focus { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 50%; }
+.help-box {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    width: 330px;
+    max-width: calc(100vw - 32px);
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow), 0 8px 28px rgba(0, 0, 0, 0.18);
+    padding: 10px 12px;
+    font-size: 12.5px;
+    font-weight: 400;
+    line-height: 1.4;
+    text-align: left;
+    white-space: normal;
+    cursor: default;
+}
+.help:hover .help-box, .help:focus .help-box, .help:focus-within .help-box { display: block; }
+
+.kp-title { display: block; font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.kp-guide { display: block; }
+.kp-row { display: flex; gap: 10px; align-items: flex-start; padding: 5px 6px; border-radius: 8px; }
+.kp-row.kp-now { background: var(--surface-2); outline: 1px solid var(--line); }
+.kp-row .meta { display: block; font-size: 12px; color: var(--ink-faint); }
 .kp-num { flex: none; min-width: 38px; text-align: center; font-weight: 800; font-size: 12.5px; color: #14211c; border-radius: 6px; padding: 2px 6px; }
-.kp-guide .meta { font-size: 12px; color: var(--ink-faint); }
+.help-note { display: block; margin-top: 6px; color: var(--ink-faint); font-size: 12px; }
 
 /* ---------- Narrow screens ---------- */
 
@@ -356,6 +381,7 @@ a { color: var(--brand); }
 }
 
 @media (max-width: 560px) {
+    .help-box { position: fixed; top: 72px; left: 16px; right: 16px; width: auto; max-width: none; max-height: calc(100vh - 100px); overflow-y: auto; }
     .topbar { padding: 10px 14px; flex-wrap: wrap; }
     .search { order: 3; flex-basis: 100%; max-width: none; }
     .national { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 14px; }
