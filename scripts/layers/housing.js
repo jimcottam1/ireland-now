@@ -95,7 +95,7 @@ async function fetchHousing() {
         updatedAt: new Date().toISOString(),
         source: SOURCE,
         period: { from: yearAgo.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) },
-        latestSale: latestSale && latestSale.toISOString().slice(0, 10),
+        latestSale: latestSale && `${latestSale.getFullYear()}-${String(latestSale.getMonth() + 1).padStart(2, '0')}-${String(latestSale.getDate()).padStart(2, '0')}`,
         national: { median: natMed, sales: all.length, change: natPrev ? Number((100 * (natMed - natPrev) / natPrev).toFixed(1)) : null },
         counties
     };

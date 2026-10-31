@@ -79,7 +79,9 @@ async function fetchRivers() {
         if (s.trend === 'rising-fast') { c.rising++; c.risingFast++; }
     }
 
-    return { updatedAt: new Date().toISOString(), source: SOURCE, stations, counties };
+    // Newest reading from any gauge: how current the OPW feed itself is
+    const sourceTime = stations.reduce((max, st) => (st.time > (max || '') ? st.time : max), null);
+    return { updatedAt: new Date().toISOString(), source: SOURCE, sourceTime, stations, counties };
 }
 
 module.exports = { fetchRivers };

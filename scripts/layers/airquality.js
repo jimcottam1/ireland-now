@@ -20,7 +20,7 @@ async function fetchAirQuality() {
         latitude: ids.map(id => centroids[id].lat).join(','),
         longitude: ids.map(id => centroids[id].lon).join(','),
         current: 'european_aqi,pm2_5,pm10,nitrogen_dioxide,ozone',
-        timezone: 'Europe/Dublin'
+        timezone: 'GMT'
     });
     const results = await getJson(`https://air-quality-api.open-meteo.com/v1/air-quality?${params}`);
 
@@ -28,7 +28,7 @@ async function fetchAirQuality() {
     ids.forEach((id, i) => {
         const c = results[i].current;
         counties[id] = {
-            time: c.time,
+            time: c.time + ':00Z',
             aqi: c.european_aqi == null ? null : Math.round(c.european_aqi),
             band: band(c.european_aqi),
             pm25: round(c.pm2_5),
@@ -38,7 +38,9 @@ async function fetchAirQuality() {
         };
     });
 
-    return { updatedAt: new Date().toISOString(), source: SOURCE, counties };
+    // The model hour these estimates are for
+    const sourceTime = Object.values(counties)[0]?.time || null;
+    return { updatedAt: new Date().toISOString(), source: SOURCE, sourceTime, counties };
 }
 
 module.exports = { fetchAirQuality };

@@ -133,6 +133,8 @@ a { color: var(--brand); }
 
 .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); }
 .stat-value { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-asof { font-size: 11px; color: var(--ink-faint); margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-asof.old { color: var(--orange); font-weight: 600; }
 .stat-sub { font-size: 12px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- Map and panel ---------- */

@@ -26,6 +26,23 @@ const HOSPITALS = [
     ['Wexford', 'wexford']
 ];
 
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** "08:00 Thursday -" -> the date of the latest Thursday 8am (Irish time) that has already passed, as YYYY-MM-DD. */
+function reportDate(heading, now = new Date()) {
+    const day = WEEKDAYS.findIndex(d => new RegExp(d, 'i').test(heading || ''));
+    if (day < 0) return null;
+    const dublin = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Dublin', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23', weekday: 'long' });
+    for (let back = 0; back < 8; back++) {
+        const t = new Date(now.getTime() - back * 86400000);
+        const p = Object.fromEntries(dublin.formatToParts(t).map(x => [x.type, x.value]));
+        if (p.weekday !== WEEKDAYS[day]) continue;
+        if (back === 0 && Number(p.hour) < 8) continue;
+        return `${p.year}-${p.month}-${p.day}`;
+    }
+    return null;
+}
+
 const countyOf = name => HOSPITALS.find(([prefix]) => name.startsWith(prefix))?.[1] || null;
 const decode = s => s.replace(/&amp;/g, '&').replace(/&#39;|&rsquo;/g, "'").replace(/\s+/g, ' ').trim();
 
@@ -72,7 +89,8 @@ async function fetchTrolleys() {
     return {
         updatedAt: new Date().toISOString(),
         source: SOURCE,
-        reported: heading || null,   // e.g. "08:00 Thursday -" (the page gives the weekday, not the date)
+        reported: heading || null,
+        reportDate: reportDate(heading),   // e.g. "08:00 Thursday -" (the page gives the weekday, not the date)
         national,
         hospitals: hospitals.sort((a, b) => b.total - a.total),
         counties

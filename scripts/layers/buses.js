@@ -118,6 +118,8 @@ async function fetchBuses() {
         source: SOURCE,
         buses,
         counties,
+        // When the NTA generated the vehicle positions (seconds since 1970)
+        sourceTime: vehicles.header?.timestamp ? new Date(Number(vehicles.header.timestamp) * 1000).toISOString() : null,
         national: {
             running: buses.length,
             late: buses.filter(b => b.minutesLate >= 5).length,

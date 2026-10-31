@@ -414,23 +414,57 @@
             ? Object.entries(data.airquality.counties).filter(([, c]) => c.aqi != null).sort((a, b) => b[1].aqi - a[1].aqi)[0]
             : null;
 
+        // How old each source's own data is (not when this site fetched it)
+        // Live feeds carry no timestamp of their own, so the time we read them is their age
+        const live = layer => data[layer] ? { text: `Live feed, checked ${clock(data[layer].updatedAt)}`, old: hoursOld(data[layer].updatedAt) > 2 } : null;
+        const at = (iso, maxHours, prefix = 'Data from') => iso ? { text: `${prefix} ${clock(iso)}`, old: hoursOld(iso) > maxHours } : null;
+        const onDate = (date, maxDays, prefix) => date ? { text: `${prefix} ${dayName(date)}${agoDays(date)}`, old: hoursOld(date + 'T12:00:00Z') > maxDays * 24 } : null;
+        const forMonth = (label, maxDays) => {
+            if (!label) return null;
+            // A month's figures are "as of" the end of that month
+            const [y, m] = [Number(label.slice(0, 4)), MONTHS.indexOf(label.slice(5)) + 1];
+            const end = new Date(Date.UTC(y, m, 0, 12));
+            return { text: `${monthName(label)} figures`, old: hoursOld(end.toISOString()) > maxDays * 24 };
+        };
+
         const cards = [
-            ['Weather warnings', w.length ? `${w.length} active` : 'None', top ? `Highest: ${top}` : 'Met Éireann'],
-            ['Wind power', g?.windPercent != null ? `${g.windPercent}%` : '–', g ? `of demand · ${fmt(g.demandMW)} MW · ${fmt(g.co2)} gCO₂/kWh` : ''],
-            ['Trains running', t ? fmt(t.running) : '–', t ? `${t.late} running 5+ min late` : ''],
-            ['Buses tracked', data.buses ? fmt(data.buses.national.running) : '–', data.buses ? `${fmt(data.buses.national.late)} running 5+ min late` : ''],
-            ['Water notices', fmt(water.filter(n => n.active).length), `${water.filter(n => !n.active).length} more due this week`],
-            ['Rivers rising', data.rivers ? fmt(rising) : '–', data.rivers ? `of ${fmt(data.rivers.stations.length)} gauges` : ''],
-            ['House prices', h ? euro(h.median) : '–', h ? `${pct(h.change)} on last year` : ''],
-            ['On trolleys', tr ? fmt(tr.national.total) : '–', tr ? `at 8am ${(tr.reported || '').replace(/^08:00\s*/, '').replace(/\s*-\s*$/, '')} (HSE)` : ''],
-            ['Petrol · diesel', fuel ? `${euroL(fuel.petrol)} · ${euroL(fuel.diesel)}` : '–', fuel ? `per litre, week of ${dayName(fuel.date)}` : ''],
-            ['Unemployment', econ ? `${econ.unemployment.rate.toFixed(1)}%` : '–', econ ? `${monthName(econ.unemployment.month)}, was ${econ.unemployment.yearAgo?.toFixed(1)}%` : ''],
-            ['Inflation', econ ? `${econ.inflation.annual.toFixed(1)}%` : '–', econ ? `prices in the year to ${monthName(econ.inflation.month).split(' ')[0]}` : ''],
-            ['Air quality', worstAir ? worstAir[1].band : '–', worstAir ? `worst is ${nameOf(worstAir[0])}, index ${worstAir[1].aqi}` : ''],
-            ['Northern Lights', sp ? sp.aurora.text.split(':')[0].replace(/,.*/, '') : '–', sp ? `Kp ${sp.kp ?? '–'} now${sp.peakKp != null ? `, ${sp.peakKp} max next 24 hrs` : ''}` : '']
+            ['Weather warnings', w.length ? `${w.length} active` : 'None', top ? `Highest: ${top}` : 'Met Éireann', live('warnings')],
+            ['Wind power', g?.windPercent != null ? `${g.windPercent}%` : '–', g ? `of demand · ${fmt(g.demandMW)} MW · ${fmt(g.co2)} gCO₂/kWh` : '', at(g?.sourceTime, 2, 'Reading at')],
+            ['Trains running', t ? fmt(t.running) : '–', t ? `${t.late} running 5+ min late` : '', live('trains')],
+            ['Buses tracked', data.buses ? fmt(data.buses.national.running) : '–', data.buses ? `${fmt(data.buses.national.late)} running 5+ min late` : '',
+                data.buses?.sourceTime ? at(data.buses.sourceTime, 2, 'Positions at') : live('buses')],
+            ['Water notices', fmt(water.filter(n => n.active).length), `${water.filter(n => !n.active).length} more due this week`, live('water')],
+            ['Rivers rising', data.rivers ? fmt(rising) : '–', data.rivers ? `of ${fmt(data.rivers.stations.length)} gauges` : '', at(data.rivers?.sourceTime, 3, 'Latest reading')],
+            ['House prices', h ? euro(h.median) : '–', h ? `${pct(h.change)} on last year` : '', onDate(data.housing?.latestSale, 30, 'Sales registered to')],
+            ['On trolleys', tr ? fmt(tr.national.total) : '–', tr ? 'people waiting at 8am (HSE)' : '', onDate(tr?.reportDate, 4, 'Report of')],
+            ['Petrol · diesel', fuel ? `${euroL(fuel.petrol)} · ${euroL(fuel.diesel)}` : '–', fuel ? 'per litre, national average' : '', onDate(fuel?.date, 14, 'Week of')],
+            ['Unemployment', econ ? `${econ.unemployment.rate.toFixed(1)}%` : '–', econ ? `was ${econ.unemployment.yearAgo?.toFixed(1)}% a year before` : '', forMonth(econ?.unemployment.month, 45)],
+            ['Inflation', econ ? `${econ.inflation.annual.toFixed(1)}%` : '–', econ ? 'rise in prices over a year' : '', forMonth(econ?.inflation.month, 45)],
+            ['Air quality', worstAir ? worstAir[1].band : '–', worstAir ? `worst is ${nameOf(worstAir[0])}, index ${worstAir[1].aqi}` : '', at(data.airquality?.sourceTime, 3, 'Model estimate for')],
+            ['Northern Lights', sp ? sp.aurora.text.split(':')[0].replace(/,.*/, '') : '–', sp ? `Kp ${sp.kp ?? '–'} now${sp.peakKp != null ? `, ${sp.peakKp} max next 24 hrs` : ''}` : '', at(sp?.kpTime, 6, 'Kp reading')]
         ];
-        document.getElementById('national').innerHTML = cards.map(([label, value, sub]) =>
-            `<div class="stat"><div class="stat-label">${esc(label)}</div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div></div>`).join('');
+        document.getElementById('national').innerHTML = cards.map(([label, value, sub, note]) =>
+            `<div class="stat"><div class="stat-label">${esc(label)}</div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div>
+            ${note ? `<div class="stat-asof${note.old ? ' old' : ''}"${note.old ? ' title="Older than this source is usually updated"' : ''}>${note.old ? '⚠ ' : ''}${esc(note.text)}</div>` : ''}</div>`).join('');
+    }
+
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const hoursOld = iso => (Date.now() - new Date(iso).getTime()) / 3600000;
+    const agoDays = date => {
+        const days = Math.floor(hoursOld(date + 'T12:00:00Z') / 24);
+        return days >= 2 ? ` (${days} days ago)` : '';
+    };
+
+    /** "21:15 today", "yesterday 21:15", or "Thu 29 Oct, 21:15", in Irish time. */
+    function clock(iso) {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        const fmtDay = x => x.toLocaleDateString('en-CA', { timeZone: 'Europe/Dublin' });
+        const time = d.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Dublin' });
+        if (fmtDay(d) === fmtDay(new Date())) return `${time} today`;
+        if (fmtDay(d) === fmtDay(new Date(Date.now() - 86400000))) return `yesterday ${time}`;
+        if (d > new Date()) return `${time} ${d.toLocaleDateString('en-IE', { weekday: 'short', timeZone: 'Europe/Dublin' })}`;
+        return `${d.toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' })}, ${time}`;
     }
 
     // ---------- County panel ----------

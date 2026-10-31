@@ -26,6 +26,14 @@ async function series(area) {
     return [];
 }
 
+/** "31-Oct-2026 21:00:00" (Irish local time) -> ISO UTC */
+function dublinTime(text) {
+    const asUtc = new Date(String(text).replace(/-/g, ' ') + ' UTC');
+    if (Number.isNaN(asUtc.getTime())) return null;
+    const wall = tz => new Date(asUtc.toLocaleString('en-US', { timeZone: tz }));
+    return new Date(asUtc - (wall('Europe/Dublin') - wall('UTC'))).toISOString();
+}
+
 const latest = rows => rows.length ? rows[rows.length - 1] : null;
 
 async function fetchGrid() {
@@ -55,6 +63,7 @@ async function fetchGrid() {
         source: SOURCE,
         national: {
             time: d?.EffectiveTime || w?.EffectiveTime,
+            sourceTime: dublinTime(d?.EffectiveTime || w?.EffectiveTime),
             demandMW: d?.Value ?? null,
             windMW: w?.Value ?? null,
             windPercent: w && d ? Math.round(100 * w.Value / d.Value) : null,
