@@ -60,3 +60,11 @@ test('the page script (public/app.js) parses', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
     assert.doesNotThrow(() => new vm.Script(source, { filename: 'app.js' }));
 });
+
+test('crowded-dot bubbles: only the dense overlays cluster, and bubbles grow with the count', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+    const clustered = new vm.Script(source.match(/const CLUSTERED = (\[[^\]]*\]);/)[1]).runInThisContext();
+    assert.deepEqual([...clustered].sort(), ['bikes', 'buses', 'luas', 'rivers', 'water']);
+    const bubbleSize = new vm.Script(source.match(/const bubbleSize = ([^;]+);/)[1]).runInThisContext();
+    assert.ok(bubbleSize(3) < bubbleSize(30) && bubbleSize(30) < bubbleSize(300));
+});

@@ -373,7 +373,7 @@
         countyLayer?.setStyle(styleCounty);
         if (selected) countyLayer?.eachLayer(l => { if (l.feature.properties.id === selected) l.bringToFront(); });
         // Dots back on top of the (raised) selected county; layer groups have no bringToFront of their own
-        Object.values(overlayLayers).forEach(g => g.eachLayer?.(m => m.bringToFront?.()));
+        Object.values(overlayLayers).forEach(g => g.eachLayer?.(m => { if (!g.getVisibleParent || map.hasLayer(m)) m.bringToFront?.(); }));
     }
 
     function drawCounties() {
@@ -435,6 +435,7 @@
             if (!overlays[name] || !map.hasLayer(group)) continue;
             group.eachLayer(m => {
                 if (!m.info) return;
+                if (group.getVisibleParent && !map.hasLayer(m)) return;   // hidden inside a bubble (circle markers have no icon, so getVisibleParent cannot tell)
                 const p = map.latLngToContainerPoint(m.getLatLng());
                 const reach = (m.getRadius ? m.getRadius() : 11) + HIT_SLOP;
                 const d = p.distanceTo(containerPoint);
@@ -603,7 +604,8 @@
             build: () => L.layerGroup((data.waterAll?.notices || []).filter(n => n.lat != null).map(n =>
                 L.circleMarker([n.lat, n.lon], {
                     radius: n.active ? 6 : 4.5, weight: 1.5, color: '#fff',
-                    fillColor: WATER_COLOURS[n.kind] || '#2f6fd6', fillOpacity: n.active ? 0.95 : 0.55
+                    fillColor: WATER_COLOURS[n.kind] || '#2f6fd6', fillOpacity: n.active ? 0.95 : 0.55,
+                    serious: n.active && (n.kind === 'boil-water' || n.kind === 'do-not-drink')
                 }).bindPopup(`<strong>${esc(n.title)}</strong><br>
                     <span class="pill">${esc(WATER_LABELS[n.kind] || n.kind)}</span>${n.active ? '<span class="pill warn">Now</span>' : '<span class="pill">Upcoming</span>'}<br>
                     <span class="popup-meta">${n.issuer === 'NI Water'
@@ -633,7 +635,8 @@
             build: () => L.layerGroup((data.rivers?.stations || []).map(s =>
                 L.circleMarker([s.lat, s.lon], {
                     radius: s.trend.startsWith('rising') ? 6 : 4, weight: 1, color: '#fff',
-                    fillColor: TREND_COLOURS[s.trend], fillOpacity: 0.9
+                    fillColor: TREND_COLOURS[s.trend], fillOpacity: 0.9,
+                    serious: s.trend === 'rising-fast'
                 }).bindPopup(`<strong>${esc(s.name)}</strong><br>
                     Level ${esc(s.level.toFixed(2))} m${s.change != null ? ` · <span class="trend ${s.change > 0 ? 'up' : 'down'}">${s.change > 0 ? '+' : ''}${(s.change * 100).toFixed(0)} cm in 6 hrs</span>` : ''}<br>
                     <span class="popup-meta">${esc(s.trend === 'unknown' ? 'Trend appears after a few hours of readings' : s.trend.replace('-', ' '))} · ${esc(when(s.time))}</span><br>
@@ -757,10 +760,35 @@
 
     const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', bikes: 'Bike station', rnli: 'Lifeboat station' };
 
+    // Dense overlays merge into numbered bubbles when zoomed out; sparse ones (their dots carry meaning) never do
+    const CLUSTERED = ['water', 'rivers', 'buses', 'bikes', 'luas'];
+    const bubbleSize = n => n < 10 ? 34 : n < 100 ? 42 : 52;
+
+    /** A cluster group in the overlay's own colour; a warning badge shows if any dot inside is serious. */
+    function clusterGroup(colour) {
+        return L.markerClusterGroup({
+            maxClusterRadius: 45, disableClusteringAtZoom: 13, spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false, animate: false,
+            iconCreateFunction: c => {
+                const n = c.getChildCount(), size = bubbleSize(n);
+                const warn = c.getAllChildMarkers().some(m => m.options.serious);
+                return L.divIcon({
+                    className: 'dot-bubble-wrap',
+                    html: `<span class="dot-bubble" style="background:${colour}">${n}</span>${warn ? '<span class="dot-bubble-warn" title="Includes a serious warning">!</span>' : ''}`,
+                    iconSize: [size, size]
+                });
+            }
+        });
+    }
+
     function drawOverlays() {
         for (const [name, def] of Object.entries(OVERLAYS)) {
             overlayLayers[name]?.remove();
-            overlayLayers[name] = def.build();
+            const built = def.build();
+            if (CLUSTERED.includes(name)) {
+                overlayLayers[name] = clusterGroup(def.colour);
+                overlayLayers[name].addLayers(built.getLayers());
+            } else overlayLayers[name] = built;
             wireDots(overlayLayers[name], DOT_NAMES[name] || def.label, def.colour);
             if (overlays[name]) overlayLayers[name].addTo(map);
         }
