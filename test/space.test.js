@@ -78,6 +78,16 @@ test('an unrecognised response throws', async t => {
     await assert.rejects(run(t, '<html>Maintenance</html>'));
 });
 
-test('a file with no readings at all throws', { todo: 'BUG: an empty list publishes kp null and "Unlikely" as if all were quiet' }, async t => {
+test('a quiet day (low Kp) is a normal answer, not an error', async t => {
+    const n = await run(t, [row('2026-11-01T18:00:00', 0.33, 'observed'), row('2026-11-02T00:00:00', 0.67, 'predicted')]);
+    assert.equal(n.kp, 0.3);
+    assert.equal(n.aurora.level, 'none');
+});
+
+test('a file with only predictions throws', async t => {
+    await assert.rejects(run(t, [row('2026-11-02T00:00:00', 3, 'predicted')]));
+});
+
+test('a file with no readings at all throws', async t => {
     await assert.rejects(run(t, []));
 });

@@ -13,6 +13,11 @@ const SOURCE = {
 // Ireland and its near waters
 const BOX = { minlat: 51.2, maxlat: 55.6, minlon: -11.0, maxlon: -5.3 };
 
+// Regions (EMSC "Flynn" names) that are clearly another country. The county lookup also accepts points up to
+// 25 km off the coast, which would give quakes in Scotland or Wales an Irish county. "IRELAND", "IRISH SEA",
+// "NORTHERN IRELAND, U.K. REGION" and plain "UNITED KINGDOM" are left to the point lookup.
+const elsewhere = /SCOTLAND|WALES|ENGLAND|ISLE OF MAN|FRANCE|NORTH SEA|ENGLISH CHANNEL/i;
+
 async function fetchEarthquakes() {
     const start = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
     const params = new URLSearchParams({ format: 'json', ...BOX, starttime: start, limit: '200', orderby: 'time' });
@@ -27,7 +32,7 @@ async function fetchEarthquakes() {
         magnitude: p.mag,
         region: p.flynn_region,
         agency: p.auth,
-        county: countyAt(p.lon, p.lat),
+        county: elsewhere.test(p.flynn_region || '') ? null : countyAt(p.lon, p.lat),
         url: `https://www.seismicportal.eu/eventdetails.html?unid=${encodeURIComponent(p.unid)}`
     })).sort((a, b) => b.time.localeCompare(a.time));
 

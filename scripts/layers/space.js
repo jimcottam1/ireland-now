@@ -25,6 +25,7 @@ async function fetchSpace() {
 
     const observed = parsed.filter(r => r.observed === 'observed' || r.observed === 'estimated');
     const latest = observed[observed.length - 1];
+    if (!latest) throw new Error('NOAA Kp file held no observed values');
     // Highest predicted Kp over the next 24 hours
     const next = parsed.filter(r => r.time > now - 3 * 3600000 && r.time < now + 24 * 3600000 && r.observed === 'predicted');
     const peak = next.reduce((best, r) => (r.kp > (best?.kp ?? -1) ? r : best), null);

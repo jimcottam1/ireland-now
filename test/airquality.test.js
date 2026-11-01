@@ -50,7 +50,7 @@ test('bands follow the European Air Quality Index, with the top of each band ins
     }
 });
 
-test('the band matches the rounded number shown', { todo: 'BUG: the band uses the unrounded index, so 20.4 is shown as "20" but banded Fair (Good ends at 20)' }, async () => {
+test('the band matches the rounded number shown', async () => {
     const body = results();
     body[0].current.european_aqi = 20.4;
     const d = await run(body);

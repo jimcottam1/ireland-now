@@ -118,7 +118,7 @@ test('an unrecognised response throws', async () => {
     await assert.rejects(loadLayer('crime').fetchCrime());
 });
 
-test('a table with no figures at all throws', { todo: 'BUG: publishes period from/to undefined and zero totals instead of throwing' }, async () => {
+test('a table with no figures at all throws', async () => {
     const raw = cso.table('CJQ10');
     raw.value = raw.value.map(() => null);
     await assert.rejects(run(raw));

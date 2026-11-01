@@ -40,6 +40,7 @@ async function fetchCrime() {
 
     const quarters = time.index.filter(q => c.value({ STATISTIC: () => true, [time.id]: q, [div.id]: div.index[0], [off.id]: topLevel[0] }) != null);
     const last4 = quarters.slice(-4);
+    if (!last4.length) throw new Error('CJQ10: no quarter has any recorded crime figures');
     // Year-on-year change uses only quarters whose same quarter a year earlier also has figures
     // (the current divisions only start in 2025, so early on this is fewer than four)
     const yearBefore = q => time.index[time.index.indexOf(q) - 4];

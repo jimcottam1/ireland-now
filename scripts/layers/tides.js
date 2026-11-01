@@ -41,6 +41,7 @@ async function fetchTides() {
         });
     }
 
+    if (!gauges.length) throw new Error('No tide gauge readings in the last 2 hours');
     return { updatedAt: new Date().toISOString(), source: SOURCE, gauges };
 }
 

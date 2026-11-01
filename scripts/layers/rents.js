@@ -25,6 +25,7 @@ async function fetchRents() {
     const codeFor = name => loc.index.find(k => loc.label[k] === name);
     const quarters = time.index.filter(q => COUNTY_IDS.filter(id => at(codeFor(title(id)), q) != null).length >= 20);
     const latest = quarters[quarters.length - 1];
+    if (!latest) throw new Error('RIQ02: no quarter has rents for enough counties');
     const yearBefore = time.index[time.index.indexOf(latest) - 4];
 
     const counties = {};

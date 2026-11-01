@@ -98,6 +98,8 @@ async function fetchCensus() {
     await ages(counties);
     await irish(counties);
     await commuting(counties);
+    // Every county should have its age shares; if none do, the tables were empty or not what we expect
+    if (!Object.values(counties).some(c => c.under15 != null && c.commuteCar != null)) throw new Error('Census: the tables held no usable figures');
     return { updatedAt: new Date().toISOString(), source: SOURCE, census: 2022, censusDate: '2022-04-03', counties };
 }
 

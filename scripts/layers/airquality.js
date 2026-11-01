@@ -27,10 +27,12 @@ async function fetchAirQuality() {
     const counties = {};
     ids.forEach((id, i) => {
         const c = results[i].current;
+        // Band from the rounded index, so the number shown and its band always agree
+        const aqi = c.european_aqi == null ? null : Math.round(c.european_aqi);
         counties[id] = {
             time: c.time + ':00Z',
-            aqi: c.european_aqi == null ? null : Math.round(c.european_aqi),
-            band: band(c.european_aqi),
+            aqi,
+            band: band(aqi),
             pm25: round(c.pm2_5),
             pm10: round(c.pm10),
             no2: round(c.nitrogen_dioxide),

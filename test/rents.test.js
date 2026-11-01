@@ -80,7 +80,7 @@ test('an unrecognised response throws', async () => {
     await assert.rejects(loadLayer('rents').fetchRents());
 });
 
-test('an empty table (no county has figures) throws', { todo: 'BUG: publishes quarter undefined and no counties instead of throwing' }, async () => {
+test('an empty table (no county has figures) throws', async () => {
     const raw = cso.table('RIQ02');
     raw.value = raw.value.map(() => null);
     await assert.rejects(run(raw));

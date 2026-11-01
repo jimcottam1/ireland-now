@@ -53,11 +53,13 @@ function parse(xml) {
             if (Number.isFinite(gust)) d.gust = Math.max(d.gust, gust);
         } else if (new Date(to) - new Date(from) === 3600000) {
             // Hourly interval: rain and weather symbol (longer intervals repeat the same rain, so skip them)
-            const d = day(date);
+            // Dated by its start, so rain from 23:00 to midnight stays on its own day
+            const start = new Date(from);
+            const d = day(localDate.format(start));
             d.rain += parseFloat(attr(body, 'precipitation', 'value')) || 0;
-            const hour = Number(localHour.format(t));
+            const hour = Number(localHour.format(start));
             const text = describe(attr(body, 'symbol', 'id'));
-            if (text && hour >= 8 && hour <= 20) d.symbols[text] = (d.symbols[text] || 0) + 1;
+            if (text && hour >= 8 && hour < 20) d.symbols[text] = (d.symbols[text] || 0) + 1;
         }
     }
     const today = localDate.format(new Date());
@@ -84,7 +86,9 @@ async function fetchForecast() {
             const { lat, lon } = centroids[id];
             try {
                 const xml = await getText(`http://openaccess.pf.api.met.ie/metno-wdb2ts/locationforecast?lat=${lat};long=${lon}`, { timeoutMs: 45000 });
-                counties[id] = parse(xml);
+                const days = parse(xml);
+                if (!days.length) throw new Error('no forecast days in the answer');   // HTML or an empty document
+                counties[id] = days;
             } catch {
                 failed.push(id);
             }

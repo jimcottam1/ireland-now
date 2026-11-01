@@ -62,10 +62,20 @@ test('the comparison reading is the one nearest 6 hours ago, and must be at leas
     assert.equal(sandy(d).trend, 'unknown');
 });
 
-test('a reading from long ago is not a 6-hour trend', { todo: 'BUG: with a gap in our history the only old reading is used however old it is' }, async t => {
+test('a reading from long ago is not a 6-hour trend', async t => {
     // We stored nothing for 30 hours (a failed run). The only older reading is 30 hours old, 0.6 m higher.
     const d = await run(t, { history: { [SANDY]: [[ago(30), 1.0]] } });
     assert.equal(sandy(d).trend, 'unknown', `got ${sandy(d).trend} (change ${sandy(d).change}) from a 30-hour-old reading`);
+});
+
+test('the comparison reading must be between 4 and 8 hours old, else the trend is unknown', async t => {
+    for (const [hours, expected] of [[8, 'falling'], [8.1, 'unknown'], [30, 'unknown'], [4, 'falling'], [3.9, 'unknown']]) {
+        const d = await run(t, { history: { [SANDY]: [[ago(hours), 1.0]] } });
+        assert.equal(sandy(d).trend, expected, `${hours} hours old`);
+    }
+    // A too-old reading is ignored in favour of a usable one
+    const d = await run(t, { history: { [SANDY]: [[ago(20), 2.0], [ago(7), 0.3]] } });
+    assert.equal(sandy(d).change, 0.097);
 });
 
 test('history: the new reading is added once, and anything over 48 hours old is dropped', async t => {
@@ -142,6 +152,6 @@ test('an unrecognised response throws', async t => {
     await assert.rejects(run(t, { raw: '<html>Maintenance</html>' }));
 });
 
-test('an empty feed throws rather than publishing no gauges', { todo: 'BUG: a feed with no features publishes zero stations and a null sourceTime' }, async t => {
+test('an empty feed throws rather than publishing no gauges', async t => {
     await assert.rejects(run(t, { raw: { type: 'FeatureCollection', features: [] } }));
 });

@@ -107,6 +107,6 @@ test('an unrecognised response throws', async t => {
     await assert.rejects(run(t, { message: 'Query error' }));
 });
 
-test('no readings at all throws rather than publishing no gauges', { todo: 'BUG: an empty answer publishes zero gauges (the buoy layer throws in the same case)' }, async t => {
+test('no readings at all throws rather than publishing no gauges', async t => {
     await assert.rejects(run(t, table([])));
 });

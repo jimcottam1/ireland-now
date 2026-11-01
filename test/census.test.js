@@ -104,7 +104,7 @@ test('an unrecognised response throws', async () => {
     await assert.rejects(loadLayer('census').fetchCensus());
 });
 
-test('a table with no figures at all throws', { todo: 'BUG: publishes every county with null shares and zero population instead of throwing' }, async () => {
+test('a table with no figures at all throws', async () => {
     const raw = cso.table('F1020');
     raw.value = raw.value.map(() => null);
     await assert.rejects(run({ F1020: raw }));

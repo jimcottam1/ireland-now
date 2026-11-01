@@ -52,11 +52,25 @@ test('county comes from the position: land events get a county, open water does 
     assert.equal(county('20251101_0000491'), null);
 });
 
-test('an event in Scotland is not given an Irish county', { todo: 'BUG: the 25 km coastal fallback puts quakes on the Kintyre peninsula in Co. Antrim' }, async t => {
+test('an event in Scotland is not given an Irish county', async t => {
     const d = await run(t);
     const scottish = d.quakes.filter(q => /SCOTLAND/.test(q.region));
     assert.ok(scottish.length >= 3);
     for (const q of scottish) assert.equal(q.county, null, `${q.id} at ${q.lat}, ${q.lon} (${q.region}) was given ${q.county}`);
+});
+
+test('regions that name another country get no county, even on the coast; Irish ones keep theirs', async t => {
+    const body = feed();
+    const make = (region, lat, lon, unid) => ({ ...structuredClone(body.features[1]), properties: { ...body.features[1].properties, flynn_region: region, lat, lon, unid } });
+    // 55.13, -7.74 is inside Donegal: only the region differs
+    body.features = ['WALES', 'ENGLAND', 'ISLE OF MAN', 'SCOTLAND, UNITED KINGDOM'].map((r, i) => make(r, 55.13, -7.74, `x${i}`))
+        .concat([make('IRELAND', 55.13, -7.74, 'ie'), make('NORTHERN IRELAND, U.K. REGION', 55.13, -7.74, 'ni'), make('IRISH SEA', 53.0, -6.0, 'sea')]);
+    const d = await run(t, body);
+    const county = id => d.quakes.find(q => q.id === id).county;
+    for (const id of ['x0', 'x1', 'x2', 'x3']) assert.equal(county(id), null, id);
+    assert.equal(county('ie'), 'donegal');
+    assert.equal(county('ni'), 'donegal');
+    assert.equal(county('sea'), 'wicklow', 'just offshore still maps to the nearest county');
 });
 
 test('depth is shown as a positive distance, and a missing depth stays null', async t => {

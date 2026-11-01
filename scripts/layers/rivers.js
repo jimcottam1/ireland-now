@@ -42,9 +42,13 @@ async function fetchRivers() {
         if (!readings.length || readings[readings.length - 1][0] !== p.datetime) readings.push([p.datetime, level]);
         history[ref] = readings;
 
-        // Compare with the reading nearest to TREND_HOURS ago, if we have one at least 4 hours old
+        // Compare with the reading nearest to TREND_HOURS ago, but only one between 4 and 8 hours old:
+        // after a gap in our history an older reading would not be a 6-hour trend
         const target = new Date(p.datetime).getTime() - TREND_HOURS * 3600000;
-        const older = readings.filter(([t]) => new Date(t).getTime() <= new Date(p.datetime).getTime() - 4 * 3600000);
+        const older = readings.filter(([t]) => {
+            const age = new Date(p.datetime).getTime() - new Date(t).getTime();
+            return age >= 4 * 3600000 && age <= 8 * 3600000;
+        });
         const past = older.length
             ? older.reduce((a, b) => Math.abs(new Date(a[0]) - target) < Math.abs(new Date(b[0]) - target) ? a : b)
             : null;
@@ -63,6 +67,8 @@ async function fetchRivers() {
             url: `https://waterlevel.ie${p.url}`
         });
     }
+
+    if (!stations.length) throw new Error('OPW feed held no water-level readings');
 
     // Forget stations that have disappeared from the feed
     for (const ref of Object.keys(history)) {

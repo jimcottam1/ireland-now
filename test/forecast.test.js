@@ -131,19 +131,39 @@ test('the summary is the commonest daytime weather, in plain words', async t => 
 });
 
 test('daytime means 8am to 8pm Irish time, not UTC', async t => {
-    // In summer 07:00 UTC is 08:00 Irish time (daytime); 20:00 UTC is 21:00 (night)
-    const sym = (toUtcHour, symbol) => interval(`2026-07-01T${String(toUtcHour - 1).padStart(2, '0')}:00:00Z`, `2026-07-01T${String(toUtcHour).padStart(2, '0')}:00:00Z`, 0, symbol);
-    const days = await dublin(t, '2026-07-01T00:30:00Z', doc(instant('2026-07-01T12:00:00Z', 16, 2), sym(7, 'Fog'), sym(20, 'Snow'), sym(21, 'Snow')));
+    // An hour is judged by when it starts. In summer 07:00 UTC is 08:00 Irish time (daytime); 19:00 and 20:00 UTC are 20:00 and 21:00 (night)
+    const sym = (startUtcHour, symbol) => interval(`2026-07-01T${String(startUtcHour).padStart(2, '0')}:00:00Z`, `2026-07-01T${String(startUtcHour + 1).padStart(2, '0')}:00:00Z`, 0, symbol);
+    const days = await dublin(t, '2026-07-01T00:30:00Z', doc(instant('2026-07-01T12:00:00Z', 16, 2), sym(7, 'Fog'), sym(8, 'Fog'), sym(18, 'Fog'), sym(19, 'Snow'), sym(20, 'Snow'), sym(6, 'Snow'), sym(6, 'Snow'), sym(6, 'Snow')));
     assert.equal(days[0].summary, 'Fog');
 });
 
-test('the last hour of the day is counted in that day', { todo: 'BUG: an interval is dated by when it ends, so rain from 23:00 to midnight is counted in the next day' }, async t => {
+test('the last hour of the day is counted in that day', async t => {
     const days = await dublin(t, '2026-11-02T08:00:00Z', doc(
         instant('2026-11-02T12:00:00Z', 8, 1), instant('2026-11-03T12:00:00Z', 8, 1),
         interval('2026-11-02T23:00:00Z', '2026-11-03T00:00:00Z', 4.0)      // 23:00 to midnight on the 2nd
     ));
     assert.equal(days[0].rain, 4);
     assert.equal(days[1].rain, 0);
+});
+
+test('in summer the last hour is judged in Irish time too', async t => {
+    // 22:00-23:00 UTC is 23:00-24:00 on 2 July in Ireland; 23:00-00:00 UTC is the first hour of the 3rd
+    const days = await dublin(t, '2026-07-02T08:00:00Z', doc(
+        instant('2026-07-02T12:00:00Z', 15, 1), instant('2026-07-03T12:00:00Z', 15, 1),
+        interval('2026-07-02T22:00:00Z', '2026-07-02T23:00:00Z', 2.5),
+        interval('2026-07-02T23:00:00Z', '2026-07-03T00:00:00Z', 1)
+    ));
+    assert.deepEqual(days.map(d => [d.date, d.rain]), [['2026-07-02', 2.5], ['2026-07-03', 1]]);
+});
+
+test('a few counties with unusable answers are left out; most of them throws', async t => {
+    const warn = console.warn; console.warn = () => {};
+    try {
+        const ok = doc(instant('2026-11-02T12:00:00Z', 9, 2));
+        const d = await run(t, WINTER_NOW, url => (url.includes('lat=54.868;') ? '<html>Oops</html>' : ok));
+        assert.ok(!('antrim' in d.counties), 'HTML for one county leaves it out');
+        assert.equal(Object.keys(d.counties).length, 31);
+    } finally { console.warn = warn; }
 });
 
 test('a county that fails is left out; more than half failing throws', async t => {
@@ -164,6 +184,6 @@ test('a county that fails is left out; more than half failing throws', async t =
     } finally { console.warn = warn; }
 });
 
-test('an unrecognised answer for every county throws rather than publishing empty forecasts', { todo: 'BUG: HTML or an empty document parses to no days, and every county is published with an empty forecast' }, async t => {
+test('an unrecognised answer for every county throws rather than publishing empty forecasts', async t => {
     await assert.rejects(run(t, WINTER_NOW, '<html><body>Service unavailable</body></html>'));
 });
