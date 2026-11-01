@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const state = require('./lib/state');
+const { redactedMessage } = require('./lib/redact');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -54,10 +55,12 @@ async function runLayer(name, [fetchLayer, maxAgeHours]) {
         return { data, status: { ok: true, stale: false, updatedAt: data.updatedAt } };
     } catch (error) {
         const last = state.read(`last-${name}`);
-        console.error(`✗ ${name}: ${error.message}${last ? ' (using last good copy)' : ''}`);
+        // status.json is published, so keys must never reach it
+        const message = redactedMessage(error);
+        console.error(`✗ ${name}: ${message}${last ? ' (using last good copy)' : ''}`);
         return {
             data: last,
-            status: { ok: false, stale: Boolean(last), updatedAt: last?.updatedAt || null, error: error.message }
+            status: { ok: false, stale: Boolean(last), updatedAt: last?.updatedAt || null, error: message }
         };
     }
 }

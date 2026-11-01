@@ -705,7 +705,7 @@
             }))
         },
         bikes: {
-            label: 'Dublin Bikes', colour: '#1f8a5b',
+            label: 'Dublin Bikes', colour: '#0e9aa7',
             build: () => L.layerGroup((data.bikes?.stations || []).map(s => L.circleMarker([s.lat, s.lon], {
                 radius: 4.5, weight: 1, color: '#fff', fillColor: bikeColour(s), fillOpacity: 0.95
             }).bindPopup(`<strong>${esc(s.name)}</strong><br>
@@ -736,9 +736,9 @@
         return since && hoursOld(since) < 7 * 24 ? ` <span class="popup-meta">(counted since ${esc(clock(since))})</span>` : '';
     }
     const rnliLink = url => /^https:\/\/([a-z0-9-]+\.)*rnli\.org\//i.test(url || '') ? url : null;
-
+    // Dublin Bikes dot colour: none (plum), a few (amber), plenty (teal), closed grey; distinct from the Luas red and green
     // Dublin Bikes dot colour: none (red), a few (orange), plenty (green); closed stations grey
-    const bikeColour = s => !s.open ? '#7c8b85' : s.bikes === 0 ? '#d7263d' : s.bikes < 5 ? '#ef8a1f' : '#1f8a5b';
+    const bikeColour = s => !s.open ? '#7c8b85' : s.bikes === 0 ? '#8b3a62' : s.bikes < 5 ? '#e0a800' : '#0e9aa7';
 
     // What each dot colour means: [colour, label, optional ring colour]
     const DOT_KEYS = {
@@ -751,7 +751,7 @@
         trains: [['#1f8a5b', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late']],
         buses: [['#c2410c', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late'], ['#7c8b85', 'No delay information']],
         luas: [['#d7263d', 'Red Line stop'], ['#1f8a5b', 'Green Line stop']],
-        bikes: [['#1f8a5b', '5 or more bikes'], ['#ef8a1f', '1 to 4 bikes'], ['#d7263d', 'No bikes'], ['#7c8b85', 'Station closed']],
+        bikes: [['#0e9aa7', '5 or more bikes'], ['#e0a800', '1 to 4 bikes'], ['#8b3a62', 'No bikes'], ['#7c8b85', 'Station closed']],
         rnli: [['#1d4ed8', 'Launched in the last 7 days (bigger = more)'], ['#93b4e8', 'No launches in the last 7 days']]
     };
 

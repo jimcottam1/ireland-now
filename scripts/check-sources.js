@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { redact } = require('./lib/redact');
 
 const STALE_HOURS = 24;
 const LABEL = 'data-source';
@@ -31,7 +32,7 @@ function main() {
         const body = [
             `The **${name}** layer has failed on every build for more than ${STALE_HOURS} hours, so the site is showing old data.`,
             '',
-            `- Last error: \`${String(s.error || 'unknown').slice(0, 300)}\``,
+            `- Last error: \`${redact(s.error || 'unknown').slice(0, 300)}\``,
             `- Last good data: ${s.updatedAt ? `${s.updatedAt} (${Math.round(s.age)} hours ago)` : 'none'}`,
             `- Build: ${process.env.GITHUB_SERVER_URL || ''}/${process.env.GITHUB_REPOSITORY || ''}/actions/runs/${process.env.GITHUB_RUN_ID || ''}`,
             '',

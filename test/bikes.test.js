@@ -68,3 +68,32 @@ test('a failed request never puts the key in the error', withKey(async () => {
         });
     } finally { global.fetch = realFetch; }
 }));
+
+const stations = () => JSON.parse(fixture('jcdecaux-dublin.json'));
+
+test('stations with missing or null counts are skipped, not shown as 0', withKey(async () => {
+    const list = stations();
+    delete list[0].available_bikes;          // a renamed field
+    list[1].available_bike_stands = null;
+    mockHttp(route(list));
+    const d = await loadLayer('bikes').fetchBikes();
+    assert.deepEqual(d.stations.map(s => s.id).sort((a, b) => a - b), [7, 9]);
+}));
+
+test('throws when most stations have no usable counts', withKey(async () => {
+    const list = stations().map(s => { const { available_bikes, ...rest } = s; return { ...rest, bikes_available: available_bikes }; });
+    mockHttp(route(list));
+    await assert.rejects(loadLayer('bikes').fetchBikes(), /Dublin Bikes/);
+}));
+
+test('throws when every open station shows 0 bikes and 0 stands', withKey(async () => {
+    const list = stations().map(s => ({ ...s, available_bikes: 0, available_bike_stands: 0 }));
+    mockHttp(route(list));
+    await assert.rejects(loadLayer('bikes').fetchBikes(), /0 bikes and 0 stands/);
+}));
+
+test('the source has a licence and a link to the terms', () => {
+    const { SOURCE } = loadLayer('bikes');
+    assert.match(SOURCE.licence, /Licence Ouverte/);
+    assert.match(SOURCE.licenceUrl, /^https:\/\/developer\.jcdecaux\.com\//);
+});
