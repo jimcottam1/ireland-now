@@ -310,7 +310,8 @@
         if (keys.length) {
             html += `<details class="legend-dots"${keys.length <= 2 ? ' open' : ''}><summary>Dots on the map</summary>${keys.map(([name, rows]) => `
                 <div class="legend-sub">${esc(OVERLAYS[name].label)}</div>
-                ${rows.map(([colour, text, ring]) => `<div class="legend-row"><span class="legend-dot" style="background:${colour}${ring ? `;box-shadow:0 0 0 2px ${ring}` : ''}"></span>${esc(text)}</div>`).join('')}`).join('')}</details>`;
+                ${rows.map(([colour, text, ring]) => `<div class="legend-row"><span class="legend-dot" style="background:${colour}${ring ? `;box-shadow:0 0 0 2px ${ring}` : ''}"></span>${esc(text)}</div>`).join('')}`).join('')}${canCluster && keys.some(([name]) => CLUSTERED.includes(name))
+                ? '<div class="legend-row legend-note">Numbers show grouped dots: zoom in or click to split. ! = includes a serious warning</div>' : ''}</details>`;
         }
         // On phones the key starts folded into a small "Key" button so it doesn't cover the map
         if (legendOpen === null) legendOpen = !window.matchMedia('(max-width: 560px)').matches;
@@ -695,7 +696,7 @@
             }))
         },
         luas: {
-            label: 'Luas stops', colour: '#d7263d',
+            label: 'Luas stops', colour: '#5b3f8c',
             build: () => L.layerGroup((data.luas?.stops || []).map(s => {
                 const line = data.luas.lines?.[s.line];
                 return L.circleMarker([s.lat, s.lon], {
@@ -708,7 +709,7 @@
             }))
         },
         bikes: {
-            label: 'Dublin Bikes', colour: '#0e9aa7',
+            label: 'Dublin Bikes', colour: '#0b7c86',
             build: () => L.layerGroup((data.bikes?.stations || []).map(s => L.circleMarker([s.lat, s.lon], {
                 radius: 4.5, weight: 1, color: '#fff', fillColor: bikeColour(s), fillOpacity: 0.95
             }).bindPopup(`<strong>${esc(s.name)}</strong><br>
@@ -741,7 +742,7 @@
     const rnliLink = url => /^https:\/\/([a-z0-9-]+\.)*rnli\.org\//i.test(url || '') ? url : null;
     // Dublin Bikes dot colour: none (plum), a few (amber), plenty (teal), closed grey; distinct from the Luas red and green
     // Dublin Bikes dot colour: none (red), a few (orange), plenty (green); closed stations grey
-    const bikeColour = s => !s.open ? '#7c8b85' : s.bikes === 0 ? '#8b3a62' : s.bikes < 5 ? '#e0a800' : '#0e9aa7';
+    const bikeColour = s => !s.open ? '#7c8b85' : s.bikes === 0 ? '#8b3a62' : s.bikes < 5 ? '#e0a800' : '#0b7c86';
 
     // What each dot colour means: [colour, label, optional ring colour]
     const DOT_KEYS = {
@@ -754,7 +755,7 @@
         trains: [['#1f8a5b', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late']],
         buses: [['#c2410c', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late'], ['#7c8b85', 'No delay information']],
         luas: [['#d7263d', 'Red Line stop'], ['#1f8a5b', 'Green Line stop']],
-        bikes: [['#0e9aa7', '5 or more bikes'], ['#e0a800', '1 to 4 bikes'], ['#8b3a62', 'No bikes'], ['#7c8b85', 'Station closed']],
+        bikes: [['#0b7c86', '5 or more bikes'], ['#e0a800', '1 to 4 bikes'], ['#8b3a62', 'No bikes'], ['#7c8b85', 'Station closed']],
         rnli: [['#1d4ed8', 'Launched in the last 7 days (bigger = more)'], ['#93b4e8', 'No launches in the last 7 days']]
     };
 
@@ -762,6 +763,7 @@
 
     // Dense overlays merge into numbered bubbles when zoomed out; sparse ones (their dots carry meaning) never do
     const CLUSTERED = ['water', 'rivers', 'buses', 'bikes', 'luas'];
+    const canCluster = typeof L.markerClusterGroup === 'function';   // false if the library was blocked: plain dots then
     const bubbleSize = n => n < 10 ? 34 : n < 100 ? 42 : 52;
 
     /** A cluster group in the overlay's own colour; a warning badge shows if any dot inside is serious. */
@@ -785,7 +787,7 @@
         for (const [name, def] of Object.entries(OVERLAYS)) {
             overlayLayers[name]?.remove();
             const built = def.build();
-            if (CLUSTERED.includes(name)) {
+            if (canCluster && CLUSTERED.includes(name)) {
                 overlayLayers[name] = clusterGroup(def.colour);
                 overlayLayers[name].addLayers(built.getLayers());
             } else overlayLayers[name] = built;

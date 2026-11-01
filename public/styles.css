@@ -418,6 +418,7 @@ a { color: var(--brand); }
 .legend-dots { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--line); }
 .legend-dots summary { font-weight: 700; cursor: pointer; }
 .legend-sub { font-weight: 600; margin-top: 4px; color: var(--ink-soft); }
+.legend-note { margin-top: 6px; color: var(--ink-soft); }
 .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; margin: 0 2px; }
 
 /* ---------- Charts, forecast and station readings ---------- */

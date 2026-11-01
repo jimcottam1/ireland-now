@@ -68,3 +68,10 @@ test('crowded-dot bubbles: only the dense overlays cluster, and bubbles grow wit
     const bubbleSize = new vm.Script(source.match(/const bubbleSize = ([^;]+);/)[1]).runInThisContext();
     assert.ok(bubbleSize(3) < bubbleSize(30) && bubbleSize(30) < bubbleSize(300));
 });
+
+test('the page still works if the markercluster script is blocked', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+    assert.match(source, /const canCluster = typeof L\.markerClusterGroup === 'function'/);
+    assert.match(source, /if \(canCluster && CLUSTERED\.includes\(name\)\)/);
+    assert.equal((source.match(/L\.markerClusterGroup\(/g) || []).length, 1);   // only used inside the guarded branch
+});
