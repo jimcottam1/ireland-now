@@ -690,6 +690,7 @@
                 }).bindPopup(`<strong>${esc(s.name)}</strong> <span class="popup-meta">RNLI lifeboat station</span><br>
                     ${esc(rnliCount(n))}${rnliCoverage()}<br>
                     ${n ? `<span class="popup-meta">Latest: ${esc(s.launches.slice(0, 3).map(clock).join(', '))}</span><br>` : ''}
+                    ${data.rnli.sourceTime ? `<span class="popup-meta">Newest launch in RNLI feed: ${esc(clock(data.rnli.sourceTime))}</span><br>` : ''}
                     ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Station page on rnli.org</a>` : ''}`);
             }))
         }
@@ -1561,7 +1562,7 @@
         sources.push({ name: 'Tailte Éireann county boundaries', url: 'https://data-osi.opendata.arcgis.com/', licence: 'CC BY 4.0' });
         sources.push({ name: 'OSNI county boundaries (Northern Ireland)', url: 'https://www.spatialni.gov.uk/', licence: 'Open Government Licence' });
         document.getElementById('footer').innerHTML = `<strong>Data sources</strong> · refreshed every hour, slower datasets daily
-            <ul>${sources.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a> (${esc(s.licence)})</li>`).join('')}</ul>
+            <ul>${sources.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a> (${/^https:\/\//.test(s.licenceUrl || '') ? `<a href="${esc(s.licenceUrl)}" target="_blank" rel="noopener">${esc(s.licence)}</a>` : esc(s.licence)})</li>`).join('')}</ul>
             <p style="margin-top:8px">Ireland Now is an independent project and isn't affiliated with any of these organisations.</p>`;
     }
 
