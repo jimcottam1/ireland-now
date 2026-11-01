@@ -3,14 +3,14 @@
     'use strict';
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
-        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames'];
+        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
     let countyLayer = null;
     let selected = null;   // county id
     let view = 'warnings';
-    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false };
+    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false };
     const overlayLayers = {};
 
     // ---------- Helpers ----------
@@ -639,6 +639,18 @@
                 }).bindPopup(`<strong>${esc(b.route)}</strong> ${esc(b.name)}<br>${esc(b.operator)}<br>
                     <span class="popup-meta">${late == null ? 'No delay information' : late > 0 ? `${late} min late` : late < 0 ? `${-late} min early` : 'On time'} · position at last update</span>`);
             }))
+        },
+        luas: {
+            label: 'Luas stops', colour: '#d7263d',
+            build: () => L.layerGroup((data.luas?.stops || []).map(s => {
+                const line = data.luas.lines?.[s.line];
+                return L.circleMarker([s.lat, s.lon], {
+                    radius: 4.5, weight: 1, color: '#fff',
+                    fillColor: s.line === 'green' ? '#1f8a5b' : '#d7263d', fillOpacity: 0.95
+                }).bindPopup(`<strong>${esc(s.name)}</strong> <span class="popup-meta">${esc(line?.name || (s.line === 'green' ? 'Green Line' : 'Red Line'))}</span><br>
+                    ${line ? esc(line.message) : ''}<br>
+                    <a href="https://luas.ie/" target="_blank" rel="noopener">Live times on luas.ie</a>`);
+            }))
         }
     };
 
@@ -651,10 +663,11 @@
         buoys: [['#f5d90a', 'Weather buoy', '#0e7490']],
         quakes: [['#f97316', 'Bigger circle = bigger quake']],
         trains: [['#1f8a5b', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late']],
-        buses: [['#c2410c', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late'], ['#7c8b85', 'No delay information']]
+        buses: [['#c2410c', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late'], ['#7c8b85', 'No delay information']],
+        luas: [['#d7263d', 'Red Line stop'], ['#1f8a5b', 'Green Line stop']]
     };
 
-    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus' };
+    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop' };
 
     function drawOverlays() {
         for (const [name, def] of Object.entries(OVERLAYS)) {
@@ -1043,6 +1056,9 @@
                 : '<p class="soft">No tracked buses or trains here at the last update.</p>', ['TFI Live', 'https://www.transportforireland.ie/']);
         }
 
+        // Luas (Dublin only)
+        if (id === 'dublin') html += luasSection();
+
         // House prices
         const h = data.housing?.counties?.[id];
         if (!ni) html += section('House prices', h ? `
@@ -1114,6 +1130,7 @@
             ${data.housing ? ranked(id => data.housing.counties[id]?.change, 'Fastest-rising prices', pct) : ''}
             ${data.rents ? ranked(id => data.rents.counties[id]?.rent, 'Highest rents', v => `€${fmt(v)} a month`) + asOf(`RTB figures for ${quarterName(data.rents.quarter)}`, quarterAgeDays(data.rents.quarter) > 270) : ''}
             ${data.weather ? ranked(id => data.weather.counties[id]?.temperature, 'Warmest right now', v => `${v.toFixed(1)}°C`) : ''}
+            ${luasSection()}
             ${electricitySection()}
             ${trolleySection()}
             ${fuelSection()}
@@ -1139,6 +1156,16 @@
             ], { labels: [gridHour(first), gridHour(last)], unit: ' MW', min: 0 })}
             <p class="muted">All-island, megawatts. Carbon intensity ${esc(fmt(g.co2))} gCO₂/kWh.</p>`,
             ['Smart Grid Dashboard', 'https://www.smartgriddashboard.com/']);
+    }
+
+    // Luas line status (no tram times: the site updates hourly, so they would be stale)
+    function luasSection() {
+        const l = data.luas;
+        if (!l?.lines) return '';
+        const rows = Object.entries(l.lines).map(([key, line]) => `
+            <p class="soft"><strong>${esc(line.name)}</strong> <span class="pill ${line.normal ? 'down' : 'warn'}">${esc(line.normal ? 'Normal' : 'Disrupted')}</span><br>${esc(line.message)}</p>`).join('');
+        return section('Luas', rows + (l.sourceTime ? asOf(`Status at ${clock(l.sourceTime)}`, hoursOld(l.sourceTime) > 2) : ''),
+            ['luas.ie', 'https://luas.ie/']);
     }
 
     function trolleySection() {

@@ -45,6 +45,7 @@ Measured weather (7 days per Met Éireann station) and river levels (48 hours pe
 | Sunrise, sunset, moon | Calculated in the browser (standard astronomical formulas), no data source | Live |
 | Dáil activity | [Oireachtas API](https://api.oireachtas.ie/): latest sitting day and bills from the last month | Every 6 hours |
 | NI Water incidents | [NI Water current service updates](https://www.niwater.com/whats-happening-in-your-area/current-service-updates) (read from the page; robots.txt allows it) | Hourly |
+| Luas line status and stops | [Luas forecast feed](https://luasforecasts.rpa.ie/) (no key; no robots.txt restrictions): status message for the Red and Green lines and the stop list. Tram times are not shown | Hourly |
 | Water notices | [Uisce Éireann](https://www.water.ie/water-service-updates) public map layer | Hourly |
 | River levels | [OPW waterlevel.ie](https://waterlevel.ie/) | Hourly |
 | Tides | [Marine Institute](https://www.marine.ie/) tide gauge network (ERDDAP) | Hourly |

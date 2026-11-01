@@ -21,6 +21,7 @@ const LAYERS = {
     grid: [require('./layers/grid').fetchGrid, 0],
     water: [require('./layers/water').fetchWater, 0],
     niwater: [require('./layers/niwater').fetchNiWater, 0],
+    luas: [require('./layers/luas').fetchLuas, 0],
     marine: [require('./layers/marine').fetchMarine, 0],
     observations: [require('./layers/observations').fetchObservations, 0],
     airquality: [require('./layers/airquality').fetchAirQuality, 0],
