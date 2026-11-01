@@ -1,0 +1,7 @@
+[
+  {"number":42,"contract_name":"dublin","name":"SMITHFIELD NORTH","address":"Smithfield North","position":{"lat":53.349562,"lng":-6.278198},"banking":true,"bonus":false,"bike_stands":30,"available_bike_stands":8,"available_bikes":22,"status":"OPEN","last_update":1793581234000},
+  {"number":5,"contract_name":"dublin","name":"CHARLEMONT PLACE","address":"Charlemont Street","position":{"lat":53.330662,"lng":-6.260177},"banking":false,"bonus":false,"bike_stands":40,"available_bike_stands":40,"available_bikes":0,"status":"OPEN","last_update":1793581100000},
+  {"number":7,"contract_name":"dublin","name":"CHRISTCHURCH PLACE","address":"Christchurch Place","position":{"lat":53.343368,"lng":-6.27012},"banking":false,"bonus":false,"bike_stands":20,"available_bike_stands":17,"available_bikes":3,"status":"OPEN","last_update":1793581300000},
+  {"number":9,"contract_name":"dublin","name":"BLESSINGTON STREET & CO","address":"Blessington Street","position":{"lat":53.356769,"lng":-6.26814},"banking":false,"bonus":false,"bike_stands":20,"available_bike_stands":5,"available_bikes":9,"status":"CLOSED","last_update":1793580000000},
+  {"number":99,"contract_name":"dublin","name":"NO POSITION","address":"x","position":null,"banking":false,"bonus":false,"bike_stands":20,"available_bike_stands":5,"available_bikes":15,"status":"OPEN","last_update":1793581400000}
+]

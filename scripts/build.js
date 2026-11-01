@@ -22,6 +22,7 @@ const LAYERS = {
     water: [require('./layers/water').fetchWater, 0],
     niwater: [require('./layers/niwater').fetchNiWater, 0],
     luas: [require('./layers/luas').fetchLuas, 0],
+    bikes: [require('./layers/bikes').fetchBikes, 0],
     rnli: [require('./layers/rnli').fetchRnli, 0], // the station list is cached for 30 days inside the layer
     marine: [require('./layers/marine').fetchMarine, 0],
     observations: [require('./layers/observations').fetchObservations, 0],

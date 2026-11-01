@@ -3,14 +3,14 @@
     'use strict';
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
-        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'rnli'];
+        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'bikes', 'rnli'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
     let countyLayer = null;
     let selected = null;   // county id
     let view = 'warnings';
-    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false, rnli: false };
+    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false, bikes: false, rnli: false };
     const overlayLayers = {};
 
     // ---------- Helpers ----------
@@ -704,6 +704,14 @@
                     <a href="https://luas.ie/" target="_blank" rel="noopener">Live times on luas.ie</a>`);
             }))
         },
+        bikes: {
+            label: 'Dublin Bikes', colour: '#1f8a5b',
+            build: () => L.layerGroup((data.bikes?.stations || []).map(s => L.circleMarker([s.lat, s.lon], {
+                radius: 4.5, weight: 1, color: '#fff', fillColor: bikeColour(s), fillOpacity: 0.95
+            }).bindPopup(`<strong>${esc(s.name)}</strong><br>
+                ${s.open ? `${esc(fmt(s.bikes))} bike${s.bikes === 1 ? '' : 's'} · ${esc(fmt(s.stands))} free stand${s.stands === 1 ? '' : 's'}` : 'Station closed'}<br>
+                ${data.bikes.sourceTime ? `<span class="popup-meta">Updated ${esc(clock(data.bikes.sourceTime))}</span>` : ''}`)))
+        },
         rnli: {
             label: 'Lifeboats', colour: '#1d4ed8',
             build: () => L.layerGroup((data.rnli?.stations || []).map(s => {
@@ -729,6 +737,9 @@
     }
     const rnliLink = url => /^https:\/\/([a-z0-9-]+\.)*rnli\.org\//i.test(url || '') ? url : null;
 
+    // Dublin Bikes dot colour: none (red), a few (orange), plenty (green); closed stations grey
+    const bikeColour = s => !s.open ? '#7c8b85' : s.bikes === 0 ? '#d7263d' : s.bikes < 5 ? '#ef8a1f' : '#1f8a5b';
+
     // What each dot colour means: [colour, label, optional ring colour]
     const DOT_KEYS = {
         water: [['#d7263d', 'Boil water / do not drink'], ['#ef8a1f', 'Restrictions'], ['#2f6fd6', 'Supply interruption'], ['#7c8b85', 'Works, other']],
@@ -740,10 +751,11 @@
         trains: [['#1f8a5b', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late']],
         buses: [['#c2410c', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late'], ['#7c8b85', 'No delay information']],
         luas: [['#d7263d', 'Red Line stop'], ['#1f8a5b', 'Green Line stop']],
+        bikes: [['#1f8a5b', '5 or more bikes'], ['#ef8a1f', '1 to 4 bikes'], ['#d7263d', 'No bikes'], ['#7c8b85', 'Station closed']],
         rnli: [['#1d4ed8', 'Launched in the last 7 days (bigger = more)'], ['#93b4e8', 'No launches in the last 7 days']]
     };
 
-    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', rnli: 'Lifeboat station' };
+    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', bikes: 'Bike station', rnli: 'Lifeboat station' };
 
     function drawOverlays() {
         for (const [name, def] of Object.entries(OVERLAYS)) {
@@ -1133,7 +1145,7 @@
         }
 
         // Luas (Dublin only)
-        if (id === 'dublin') html += luasSection();
+        if (id === 'dublin') html += luasSection() + bikesSection();
 
         // Lifeboat launches (all-island, coastal and lake counties only)
         html += rnliCountySection(id);
@@ -1269,6 +1281,18 @@
             <p class="soft"><strong>${esc(line.name)}</strong> <span class="pill ${line.normal ? 'down' : 'warn'}">${esc(line.normal ? 'Normal' : 'Disrupted')}</span><br>${esc(line.message)}</p>`).join('');
         return section('Luas', rows + (l.sourceTime ? asOf(`Status at ${clock(l.sourceTime)}`, hoursOld(l.sourceTime) > 2) : ''),
             ['luas.ie', 'https://luas.ie/']);
+    }
+
+    // Dublin Bikes totals (the stations are on the map overlay)
+    function bikesSection() {
+        const b = data.bikes;
+        if (!b?.totals || !b.stations?.length) return '';
+        return section('Dublin Bikes', `
+            <div class="row"><span class="big">${esc(fmt(b.totals.bikes))}</span><span class="soft">bikes available</span>
+            <span class="big">${esc(fmt(b.totals.stands))}</span><span class="soft">free stands</span></div>
+            <p class="muted">${esc(fmt(b.totals.open))} of ${esc(fmt(b.totals.stations))} stations open</p>
+            ${b.sourceTime ? asOf(`Updated ${clock(b.sourceTime)}`, hoursOld(b.sourceTime) > 2) : ''}`,
+            ['dublinbikes.ie', 'https://www.dublinbikes.ie/']);
     }
 
     // RNLI lifeboat launches over the last 7 days
