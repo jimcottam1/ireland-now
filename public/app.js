@@ -325,6 +325,13 @@
             pane: 'mask', renderer: L.svg({ pane: 'mask' }), className: 'island-mask',
             interactive: false, stroke: false, fillOpacity: 1
         }).addTo(map);
+        // County rings don't meet exactly, so at close zoom the mask would show thin strips: fade it out
+        const fadeMask = () => {
+            const z = map.getZoom();
+            map.getPane('mask').style.opacity = Math.max(0, Math.min(1, (11 - z) / 2));
+        };
+        map.on('zoomend', fadeMask);
+        fadeMask();
     }
 
     function styleCounty(feature) {
@@ -1136,13 +1143,13 @@
 
     function nationalPanel() {
         const w = data.warnings?.warnings || [];
-        const ranked = (key, label, format, desc = true) => {
+        const ranked = (key, label, format, desc = true, bars = true) => {
             const rows = counties.map(f => [f.properties.id, key(f.properties.id)]).filter(([, v]) => v != null)
                 .sort((a, b) => desc ? b[1] - a[1] : a[1] - b[1]).slice(0, 5);
             const top = Math.max(...rows.map(([, v]) => Math.abs(v)), 0) || 1;
             // The bar is extra: its length is the value against the biggest in the list (negatives in blue)
             const bar = v => `<span class="bar-track" aria-hidden="true"><span class="bar${v < 0 ? ' neg' : ''}" style="width:${Math.max(3, Math.abs(v) / top * 100).toFixed(1)}%"></span></span>`;
-            return section(label, `<ul class="list ranked">${rows.map(([id, v]) => `<li><a href="#" data-county="${id}">${esc(nameOf(id))}</a> <span class="meta">${esc(format(v))}</span>${bar(v)}</li>`).join('')}</ul>`);
+            return section(label, `<ul class="list ranked">${rows.map(([id, v]) => `<li><a href="#" data-county="${id}">${esc(nameOf(id))}</a> <span class="meta">${esc(format(v))}</span>${bars ? bar(v) : ''}</li>`).join('')}</ul>`);
         };
         return `<h2>All of Ireland</h2>
             <p class="panel-intro">Click any county for its warnings, weather and forecast, air quality, hospital trolleys, water notices, rivers, beaches, jobs, new homes, house prices, population and TDs. Use the buttons above the map to colour the counties or show live points.</p>
@@ -1152,7 +1159,7 @@
             ${data.housing ? ranked(id => data.housing.counties[id]?.median, 'Highest house prices', euro) : ''}
             ${data.housing ? ranked(id => data.housing.counties[id]?.change, 'Fastest-rising prices', pct) : ''}
             ${data.rents ? ranked(id => data.rents.counties[id]?.rent, 'Highest rents', v => `€${fmt(v)} a month`) + asOf(`RTB figures for ${quarterName(data.rents.quarter)}`, quarterAgeDays(data.rents.quarter) > 270) : ''}
-            ${data.weather ? ranked(id => data.weather.counties[id]?.temperature, 'Warmest right now', v => `${v.toFixed(1)}°C`) : ''}
+            ${data.weather ? ranked(id => data.weather.counties[id]?.temperature, 'Warmest right now', v => `${v.toFixed(1)}°C`, true, false) : ''}
             ${luasSection()}
             ${electricitySection()}
             ${trolleySection()}
