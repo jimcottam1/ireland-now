@@ -46,6 +46,7 @@ Measured weather (7 days per Met Éireann station) and river levels (48 hours pe
 | Dáil activity | [Oireachtas API](https://api.oireachtas.ie/): latest sitting day and bills from the last month | Every 6 hours |
 | NI Water incidents | [NI Water current service updates](https://www.niwater.com/whats-happening-in-your-area/current-service-updates) (read from the page; robots.txt allows it) | Hourly |
 | Luas line status and stops | [Luas forecast feed](https://luasforecasts.rpa.ie/) (no key; no robots.txt restrictions): status message for the Red and Green lines and the stop list. Tram times are not shown | Hourly |
+| RNLI lifeboat launches | [RNLI launches feed](https://services.rnli.org/api/launches) (no key; the site has no robots.txt) for launches, joined by station name to the [RNLI Open Data station locations](https://data-rnli.opendata.arcgis.com/) (Contains Open Data licensed under the GIS Open Data Licence), cached 30 days. The feed holds only the latest ~20 UK-wide launches, so each Irish launch is remembered for 7 days between runs. Feed times are UK local time | Hourly |
 | Water notices | [Uisce Éireann](https://www.water.ie/water-service-updates) public map layer | Hourly |
 | River levels | [OPW waterlevel.ie](https://waterlevel.ie/) | Hourly |
 | Tides | [Marine Institute](https://www.marine.ie/) tide gauge network (ERDDAP) | Hourly |

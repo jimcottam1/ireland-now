@@ -3,14 +3,14 @@
     'use strict';
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
-        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas'];
+        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'rnli'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
     let countyLayer = null;
     let selected = null;   // county id
     let view = 'warnings';
-    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false };
+    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false, rnli: false };
     const overlayLayers = {};
 
     // ---------- Helpers ----------
@@ -678,8 +678,30 @@
                     ${data.luas.sourceTime ? `<span class="popup-meta">Status at ${esc(clock(data.luas.sourceTime))}</span><br>` : ''}
                     <a href="https://luas.ie/" target="_blank" rel="noopener">Live times on luas.ie</a>`);
             }))
+        },
+        rnli: {
+            label: 'Lifeboats', colour: '#1d4ed8',
+            build: () => L.layerGroup((data.rnli?.stations || []).map(s => {
+                const n = s.launches.length;
+                const link = rnliLink(s.url);
+                return L.circleMarker([s.lat, s.lon], {
+                    radius: n ? Math.min(11, 6 + n) : 4, weight: n ? 1.5 : 1, color: '#fff',
+                    fillColor: n ? '#1d4ed8' : '#93b4e8', fillOpacity: n ? 0.95 : 0.7
+                }).bindPopup(`<strong>${esc(s.name)}</strong> <span class="popup-meta">RNLI lifeboat station</span><br>
+                    ${esc(rnliCount(n))}${rnliCoverage()}<br>
+                    ${n ? `<span class="popup-meta">Latest: ${esc(s.launches.slice(0, 3).map(clock).join(', '))}</span><br>` : ''}
+                    ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Station page on rnli.org</a>` : ''}`);
+            }))
         }
     };
+
+    const rnliCount = n => `${n} launch${n === 1 ? '' : 'es'} in the last 7 days`;
+    /** The launch feed only holds about a day, so early on we have fewer than seven days of history. */
+    function rnliCoverage() {
+        const since = data.rnli?.recordingSince;
+        return since && hoursOld(since) < 7 * 24 ? ` <span class="popup-meta">(counted since ${esc(clock(since))})</span>` : '';
+    }
+    const rnliLink = url => /^https:\/\/([a-z0-9-]+\.)*rnli\.org\//i.test(url || '') ? url : null;
 
     // What each dot colour means: [colour, label, optional ring colour]
     const DOT_KEYS = {
@@ -691,10 +713,11 @@
         quakes: [['#f97316', 'Bigger circle = bigger quake']],
         trains: [['#1f8a5b', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late']],
         buses: [['#c2410c', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late'], ['#7c8b85', 'No delay information']],
-        luas: [['#d7263d', 'Red Line stop'], ['#1f8a5b', 'Green Line stop']]
+        luas: [['#d7263d', 'Red Line stop'], ['#1f8a5b', 'Green Line stop']],
+        rnli: [['#1d4ed8', 'Launched in the last 7 days (bigger = more)'], ['#93b4e8', 'No launches in the last 7 days']]
     };
 
-    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop' };
+    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', rnli: 'Lifeboat station' };
 
     function drawOverlays() {
         for (const [name, def] of Object.entries(OVERLAYS)) {
@@ -1086,6 +1109,9 @@
         // Luas (Dublin only)
         if (id === 'dublin') html += luasSection();
 
+        // Lifeboat launches (all-island, coastal and lake counties only)
+        html += rnliCountySection(id);
+
         // House prices
         const h = data.housing?.counties?.[id];
         if (!ni) html += section('House prices', h ? `
@@ -1161,6 +1187,7 @@
             ${data.rents ? ranked(id => data.rents.counties[id]?.rent, 'Highest rents', v => `€${fmt(v)} a month`) + asOf(`RTB figures for ${quarterName(data.rents.quarter)}`, quarterAgeDays(data.rents.quarter) > 270) : ''}
             ${data.weather ? ranked(id => data.weather.counties[id]?.temperature, 'Warmest right now', v => `${v.toFixed(1)}°C`, true, false) : ''}
             ${luasSection()}
+            ${rnliNationalSection()}
             ${electricitySection()}
             ${trolleySection()}
             ${fuelSection()}
@@ -1196,6 +1223,37 @@
             <p class="soft"><strong>${esc(line.name)}</strong> <span class="pill ${line.normal ? 'down' : 'warn'}">${esc(line.normal ? 'Normal' : 'Disrupted')}</span><br>${esc(line.message)}</p>`).join('');
         return section('Luas', rows + (l.sourceTime ? asOf(`Status at ${clock(l.sourceTime)}`, hoursOld(l.sourceTime) > 2) : ''),
             ['luas.ie', 'https://luas.ie/']);
+    }
+
+    // RNLI lifeboat launches over the last 7 days
+    function rnliAge() {
+        const r = data.rnli;
+        const since = r.recordingSince && hoursOld(r.recordingSince) < 7 * 24 ? `. Counting since ${clock(r.recordingSince)}` : '';
+        return r.sourceTime ? asOf(`Newest launch in the RNLI feed: ${clock(r.sourceTime)}${since}`, hoursOld(r.sourceTime) > 24) : '';
+    }
+
+    function rnliCountySection(id) {
+        const r = data.rnli;
+        const list = (r?.stations || []).filter(s => s.county === id).sort((a, b) => b.launches.length - a.launches.length || a.name.localeCompare(b.name));
+        if (!list.length) return '';
+        const total = list.reduce((sum, s) => sum + s.launches.length, 0);
+        return section('Lifeboat launches', `
+            <p class="soft"><strong>${esc(total)}</strong> launch${total === 1 ? '' : 'es'} in the last 7 days</p>
+            <ul class="list">${list.map(s => `<li>${esc(s.name)}
+                <span class="meta">${s.launches.length ? `${esc(s.launches.length)} · latest ${esc(clock(s.launches[0]))}` : 'none'}</span></li>`).join('')}</ul>
+            ${rnliAge()}`, ['rnli.org', 'https://rnli.org/']);
+    }
+
+    function rnliNationalSection() {
+        const r = data.rnli;
+        if (!r?.stations?.length) return '';
+        const total = r.stations.reduce((sum, s) => sum + s.launches.length, 0);
+        const busiest = r.stations.filter(s => s.launches.length).sort((a, b) => b.launches.length - a.launches.length).slice(0, 5);
+        return section('Lifeboat launches', `
+            <p class="soft"><strong>${esc(total)}</strong> RNLI launch${total === 1 ? '' : 'es'} from Irish stations in the last 7 days</p>
+            ${busiest.length ? `<ul class="list">${busiest.map(s => `<li><a href="#" data-county="${esc(s.county)}">${esc(s.name)}</a>
+                <span class="meta">${esc(s.launches.length)}</span></li>`).join('')}</ul>` : ''}
+            ${rnliAge()}`, ['rnli.org', 'https://rnli.org/']);
     }
 
     function trolleySection() {
