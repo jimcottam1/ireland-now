@@ -512,8 +512,9 @@ a { color: var(--brand); }
     .section h3 { letter-spacing: 0.04em; }
     .stat-label { letter-spacing: 0.03em; }
     .updated br, .updated .muted, .updated .stale-long { display: none; }
-    .updated .stale-short { display: inline; }
-    .updated { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand p { display: none; }
+    .updated { flex: 1; min-width: 0; }
+    .updated .upd-ago, .updated .stale-short { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .control-group {
         flex-wrap: nowrap;
         overflow-x: auto;

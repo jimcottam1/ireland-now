@@ -1494,9 +1494,9 @@
     function renderMeta() {
         const stale = Object.entries(status?.layers || {}).filter(([, s]) => !s.ok);
         document.getElementById('updated').innerHTML = status
-            ? `Updated ${esc(ago(status.builtAt))}<br><span class="muted">${esc(when(status.builtAt))}</span>`
+            ? `<span class="upd-ago">Updated ${esc(ago(status.builtAt))}</span><br><span class="muted">${esc(when(status.builtAt))}</span>`
                 + (stale.length ? `<br><span class="stale stale-long">Showing older data for: ${esc(stale.map(([n]) => n).join(', '))}</span>`
-                    + `<span class="stale stale-short"> · ⚠ older: ${esc(stale.map(([n]) => n).join(', '))}</span>` : '')
+                    + `<span class="stale stale-short">⚠ older: ${esc(stale.map(([n]) => n).join(', '))}</span>` : '')
             : 'Update time unknown';
 
         const sources = LAYERS.map(n => data[n]?.source).filter(Boolean);
