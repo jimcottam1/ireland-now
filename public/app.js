@@ -649,6 +649,7 @@
                     fillColor: s.line === 'green' ? '#1f8a5b' : '#d7263d', fillOpacity: 0.95
                 }).bindPopup(`<strong>${esc(s.name)}</strong> <span class="popup-meta">${esc(line?.name || (s.line === 'green' ? 'Green Line' : 'Red Line'))}</span><br>
                     ${line ? esc(line.message) : ''}<br>
+                    ${data.luas.sourceTime ? `<span class="popup-meta">Status at ${esc(clock(data.luas.sourceTime))}</span><br>` : ''}
                     <a href="https://luas.ie/" target="_blank" rel="noopener">Live times on luas.ie</a>`);
             }))
         }

@@ -14,7 +14,9 @@ const BASE = 'https://luasforecasts.rpa.ie/xml/get.ashx';
 // A central stop on each line, used to read the line-wide message
 const CENTRAL = { red: 'ABB', green: 'STS' };
 
-const unescapeXml = s => String(s || '').replace(/&apos;|&#39;/g, "'").replace(/&quot;/g, '"')
+// &amp; goes last so "&amp;lt;" is not decoded twice
+const unescapeXml = s => String(s || '').replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&apos;/g, "'").replace(/&quot;/g, '"')
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
 const attr = (tag, name) => unescapeXml((tag.match(new RegExp(`\\b${name}="([^"]*)"`)) || [])[1]);
@@ -68,11 +70,14 @@ async function fetchLuas() {
     const lines = {};
     let sourceTime = null;
     for (const id of ids) {
+        // The message is line-wide, so one central stop stands for the whole line
         const code = stops.some(s => s.code === CENTRAL[id]) ? CENTRAL[id] : stops.find(s => s.line === id).code;
         const { message, created } = parseForecast(await getText(`${BASE}?action=forecast&stop=${code}&encrypt=false`, { timeoutMs: 30000 }));
         if (!message) throw new Error(`Luas: no status message for the ${id} line`);
-        if (created && (!sourceTime || created > sourceTime)) sourceTime = created;
-        lines[id] = { name: names[id], message, normal: /operating normally/i.test(message) };
+        if (!created) throw new Error(`Luas: no usable time for the ${id} line`);
+        if (!sourceTime || created < sourceTime) sourceTime = created; // the stalest line decides the age
+        // Only the plain all-clear counts as normal; negated or partial-service wording is disruption
+        lines[id] = { name: names[id], message, normal: /^(red|green) line services operating normally\.?$/i.test(message) };
     }
 
     return { updatedAt: new Date().toISOString(), source: SOURCE, sourceTime, lines, stops };

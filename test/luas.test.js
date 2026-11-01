@@ -41,6 +41,22 @@ test('normal and disrupted messages', async () => {
     assert.equal(d.lines.red.normal, true, 'the red line is unaffected');
 });
 
+test('negated and partial-service messages are not "normal"', async () => {
+    for (const file of ['luas-forecast-green-negated.xml', 'luas-forecast-green-partial.xml']) {
+        mockHttp(routes(file));
+        const d = await loadLayer('luas').fetchLuas();
+        assert.equal(d.lines.green.normal, false, file);
+        assert.equal(d.lines.red.normal, true);
+    }
+});
+
+test('XML entities in stop names are decoded', async () => {
+    mockHttp(routes());
+    const d = await loadLayer('luas').fetchLuas();
+    assert.ok(d.stops.some(s => s.code === 'STS' && s.name === "St. Stephen's Green"));
+    assert.ok(d.stops.some(s => s.name === 'Busáras'), 'numeric entity decoded');
+});
+
 test('sourceTime converts Irish time to UTC', async () => {
     // Winter: Irish time is UTC
     mockHttp(routes());
@@ -51,10 +67,10 @@ test('sourceTime converts Irish time to UTC', async () => {
     mockHttp([[/action=stops/, fixture('luas-stops.xml')], [/stop=ABB/, summer], [/stop=STS/, summer.replace('Red Line', 'Green Line')]]);
     d = await loadLayer('luas').fetchLuas();
     assert.equal(d.sourceTime, '2026-07-01T19:59:00.000Z');
-    // The newest of the two lines wins
+    // The older of the two lines wins, so a stale line shows as stale
     mockHttp([[/action=stops/, fixture('luas-stops.xml')], [/stop=ABB/, summer], [/stop=STS/, fixture('luas-forecast-green.xml')]]);
     d = await loadLayer('luas').fetchLuas();
-    assert.equal(d.sourceTime, '2026-11-01T20:59:00.000Z');
+    assert.equal(d.sourceTime, '2026-07-01T19:59:00.000Z');
 });
 
 test('an unrecognised response throws', async () => {
@@ -63,6 +79,12 @@ test('an unrecognised response throws', async () => {
 
     mockHttp([[/action=stops/, fixture('luas-stops.xml')], [/action=forecast/, '<stopInfo created="2026-11-01T20:59:37"></stopInfo>']]);
     await assert.rejects(loadLayer('luas').fetchLuas(), /message/);
+
+    const red = fixture('luas-forecast-red.xml').toString();
+    for (const bad of [red.replace(/ created="[^"]*"/, ''), red.replace(/created="[^"]*"/, 'created="soon"')]) {
+        mockHttp([[/action=stops/, fixture('luas-stops.xml')], [/stop=ABB/, bad], [/stop=STS/, fixture('luas-forecast-green.xml')]]);
+        await assert.rejects(loadLayer('luas').fetchLuas(), /time/);
+    }
 
     const redOnly = fixture('luas-stops.xml').toString().replace(/<line name="Luas Green Line">[\s\S]*<\/line>/, '');
     mockHttp([[/action=stops/, redOnly], ...routes().slice(1)]);
