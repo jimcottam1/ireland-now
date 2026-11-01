@@ -31,7 +31,15 @@ function mockHttp(routes) {
 function loadLayer(name) {
     const file = require.resolve(`../scripts/layers/${name}`);
     delete require.cache[file];
+    // jsonstat also captures the http functions, so reload it too
+    delete require.cache[require.resolve('../scripts/lib/jsonstat')];
     return require(file);
 }
 
-module.exports = { fixture, mockHttp, loadLayer };
+/** Freeze the clock (Date only) at an ISO time for the rest of this test, so saved live data never goes stale. */
+function freezeClock(t, iso) {
+    t.mock.timers.reset();   // calling it again within one test just moves the clock
+    t.mock.timers.enable({ apis: ['Date'], now: Date.parse(iso) });
+}
+
+module.exports = { fixture, mockHttp, loadLayer, freezeClock };
