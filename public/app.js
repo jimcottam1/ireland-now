@@ -3,7 +3,7 @@
     'use strict';
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
-        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'rnli'];
+        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'rnli'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
@@ -40,6 +40,14 @@
     const per1000 = (n, id) => {
         const pop = data.population?.counties?.[id]?.population;
         return n == null || !pop ? null : 1000 * n / pop;
+    };
+    /** Councils in a county whose planning feed stops well before the newest data (the layer names them) */
+    const planningStale = id => {
+        const p = data.planning;
+        const c = p?.counties?.[id];
+        if (!c?.incomplete) return [];
+        const top = Date.parse(p.sourceTime);
+        return c.authorities.filter(a => top - Date.parse(a.newest) > 21 * 86400000);
     };
     const dayName = date => new Date(date + 'T12:00:00Z').toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' });
     const euroL = n => n == null ? '–' : '€' + n.toFixed(3);
@@ -240,6 +248,17 @@
             describe: v => v == null ? 'No data' : `Average rent €${fmt(v)} a month`,
             ends: ['€1,000', '€2,300+'], title: 'Average monthly rent, new tenancies (RTB)'
         },
+        planning: {
+            label: 'Planning',
+            stops: [[0.2, 'eef6f1'], [0.5, 'b9dccb'], [0.9, '5fae8c'], [1.3, '1f6b4f']],
+            value: id => per1000(data.planning?.counties?.[id]?.applications, id),
+            describe: v => v == null ? 'No data' : `${v.toFixed(1)} planning applications per 1,000 people in 30 days`,
+            note: id => {
+                const stale = planningStale(id);
+                return stale.length ? `(incomplete: ${stale.map(a => a.name.replace(/ County Council$/, '').replace(/ Council$/, '')).join(' and ')} feed out of date)` : '';
+            },
+            ends: ['0.2', '1.3+ per 1,000'], title: 'Planning applications received in 30 days, per 1,000 people (up to the newest data)'
+        },
         homes: {
             label: 'New homes',
             stops: [[3, 'eef2f8'], [6, 'b6c8e6'], [10, '5f86c4'], [14, '23427f']],
@@ -360,7 +379,8 @@
                 layer.bindTooltip(() => {
                     const v = VIEWS[view].value(id);
                     const text = v == null && isNI(id) && !VIEWS[view].allIsland ? 'Not covered in Northern Ireland' : VIEWS[view].describe(v);
-                    return `${esc(feature.properties.name)}<br><span class="popup-meta">${esc(text)}</span>`;
+                    const note = v != null && VIEWS[view].note ? VIEWS[view].note(id) : '';
+                    return `${esc(feature.properties.name)}<br><span class="popup-meta">${esc(text)}${note ? ' ' + esc(note) : ''}</span>`;
                 },
                     { sticky: true, className: 'county-tip', direction: 'top', offset: [0, -6] });
                 layer.on({
@@ -1131,6 +1151,20 @@
                 ${spark([{ values: hist.map(r => r[1]), colour: '#7c3aed', label: 'Average rent' }], { labels: [quarterName(hist[0][0]), quarterName(hist[hist.length - 1][0])], unit: ' €' })}
                 ${asOf(`Figures for ${quarterName(data.rents.quarter)}, published ${shortDate(data.rents.published)}`, quarterAgeDays(data.rents.quarter) > 270)}`,
                 ['RTB', 'https://www.rtb.ie/data-insights/rtb-rent-index']);
+        }
+
+        // Planning applications (counts only)
+        const plan = data.planning?.counties?.[id];
+        if (plan && !ni) {
+            const perK = per1000(plan.applications, id);
+            const stale = planningStale(id);
+            const day = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' });
+            const staleNote = stale.length ? ` ${stale.map(a => `${a.name}'s figures stop at ${day(a.newest)}`).join('; ')}, so this is understated.` : '';
+            html += section('Planning applications', `
+                <div class="row"><span class="big">${esc(fmt(plan.applications))}</span><span class="soft">received${perK != null ? ` · ${esc(perK.toFixed(1))} per 1,000 people` : ''}</span></div>
+                <p class="muted">${esc(day(data.planning.period.from))} to ${esc(day(data.planning.period.to))}. Counts only, and councils record applications at different speeds.${esc(staleNote)}</p>
+                ${asOf(`Applications received to ${shortDate(data.planning.sourceTime)}`, hoursOld(data.planning.sourceTime) > 21 * 24)}`,
+                ['Planning Application Points', 'https://data-housinggovie.opendata.arcgis.com/datasets/housinggovie::planning-application-points']);
         }
 
         // Beaches

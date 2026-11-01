@@ -33,6 +33,7 @@ const LAYERS = {
     dail: [require('./layers/dail').fetchDail, 6],
     fuel: [require('./layers/fuel').fetchFuel, 24],
     economy: [require('./layers/economy').fetchEconomy, 24],
+    planning: [require('./layers/planning').fetchPlanning, 24],
     rents: [require('./layers/rents').fetchRents, 24],
     crime: [require('./layers/crime').fetchCrime, 24],
     census: [require('./layers/census').fetchCensus, 24 * 30],
