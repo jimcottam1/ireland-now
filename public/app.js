@@ -309,6 +309,24 @@
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
+    // Fade everything outside the island: a world-sized polygon with the counties cut out.
+    // Its own pane sits above the tiles and below the counties and dots, and never takes clicks.
+    function drawMask() {
+        map.createPane('mask');
+        map.getPane('mask').style.zIndex = 350;
+        map.getPane('mask').style.pointerEvents = 'none';
+        const world = [[-85, -180], [-85, 180], [85, 180], [85, -180]];
+        const holes = [];
+        counties.forEach(f => {
+            const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+            polys.forEach(p => holes.push(p[0].map(([lng, lat]) => [lat, lng])));
+        });
+        L.polygon([world, ...holes], {
+            pane: 'mask', renderer: L.svg({ pane: 'mask' }), className: 'island-mask',
+            interactive: false, stroke: false, fillOpacity: 1
+        }).addTo(map);
+    }
+
     function styleCounty(feature) {
         const id = feature.properties.id;
         return {
@@ -327,6 +345,7 @@
     }
 
     function drawCounties() {
+        drawMask();
         countyLayer = L.geoJSON({ type: 'FeatureCollection', features: counties }, {
             style: styleCounty,
             onEachFeature: (feature, layer) => {
@@ -784,7 +803,7 @@
         const strip = document.getElementById('national');
         strip.classList.toggle('collapsed', !expanded);
         strip.innerHTML = cards.map(([label, value, sub, note]) =>
-            `<div class="stat"><div class="stat-label">${esc(label)} ${cardHelp(label)}</div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div>
+            `<div class="stat"><div class="stat-label">${esc(label).replace(/(\S+)$/, '<span class="nw">$1')} ${cardHelp(label)}</span></div><div class="stat-value">${esc(value)}</div><div class="stat-sub">${esc(sub)}</div>
             ${note ? `<div class="stat-asof${note.old ? ' old' : ''}"${note.old ? ' title="Older than this source is usually updated"' : ''}>${note.old ? '⚠ ' : ''}${esc(note.text)}</div>` : ''}</div>`).join('')
             + `<button type="button" class="cards-toggle" data-cards aria-expanded="${expanded}">${expanded ? 'Show fewer ▴' : `Show all ${cards.length} ▾`}</button>`;
     }
@@ -1120,7 +1139,10 @@
         const ranked = (key, label, format, desc = true) => {
             const rows = counties.map(f => [f.properties.id, key(f.properties.id)]).filter(([, v]) => v != null)
                 .sort((a, b) => desc ? b[1] - a[1] : a[1] - b[1]).slice(0, 5);
-            return section(label, `<ul class="list">${rows.map(([id, v]) => `<li><a href="#" data-county="${id}">${esc(nameOf(id))}</a> <span class="meta">${esc(format(v))}</span></li>`).join('')}</ul>`);
+            const top = Math.max(...rows.map(([, v]) => Math.abs(v)), 0) || 1;
+            // The bar is extra: its length is the value against the biggest in the list (negatives in blue)
+            const bar = v => `<span class="bar-track" aria-hidden="true"><span class="bar${v < 0 ? ' neg' : ''}" style="width:${Math.max(3, Math.abs(v) / top * 100).toFixed(1)}%"></span></span>`;
+            return section(label, `<ul class="list ranked">${rows.map(([id, v]) => `<li><a href="#" data-county="${id}">${esc(nameOf(id))}</a> <span class="meta">${esc(format(v))}</span>${bar(v)}</li>`).join('')}</ul>`);
         };
         return `<h2>All of Ireland</h2>
             <p class="panel-intro">Click any county for its warnings, weather and forecast, air quality, hospital trolleys, water notices, rivers, beaches, jobs, new homes, house prices, population and TDs. Use the buttons above the map to colour the counties or show live points.</p>
@@ -1466,7 +1488,8 @@
         const stale = Object.entries(status?.layers || {}).filter(([, s]) => !s.ok);
         document.getElementById('updated').innerHTML = status
             ? `Updated ${esc(ago(status.builtAt))}<br><span class="muted">${esc(when(status.builtAt))}</span>`
-                + (stale.length ? `<br><span class="stale">Showing older data for: ${esc(stale.map(([n]) => n).join(', '))}</span>` : '')
+                + (stale.length ? `<br><span class="stale stale-long">Showing older data for: ${esc(stale.map(([n]) => n).join(', '))}</span>`
+                    + `<span class="stale stale-short"> · ⚠ older: ${esc(stale.map(([n]) => n).join(', '))}</span>` : '')
             : 'Update time unknown';
 
         const sources = LAYERS.map(n => data[n]?.source).filter(Boolean);
