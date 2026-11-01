@@ -73,4 +73,5 @@ npm install
 npm run build      # fetch everything into site/
 npm run preview    # serve site/ locally
 npm run counties   # only if county boundaries need regenerating
+npm test           # offline tests on saved responses; CI runs these before every build
 ```

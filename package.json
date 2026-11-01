@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node scripts/build.js",
     "counties": "node scripts/prepare-counties.js",
-    "preview": "npx --yes serve site"
+    "preview": "npx --yes serve site",
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"

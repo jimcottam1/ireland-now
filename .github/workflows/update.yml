@@ -30,6 +30,11 @@ jobs:
 
       - run: npm ci
 
+      # The tests use saved responses (no network), so they only fail when the code is wrong.
+      # A failure stops the build here, and the live site keeps its last good version.
+      - name: Test
+        run: npm test
+
       # River history and slow-changing layers carry over between runs in the Actions cache
       - name: Restore state
         uses: actions/cache/restore@v4
