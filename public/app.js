@@ -41,13 +41,21 @@
         const pop = data.population?.counties?.[id]?.population;
         return n == null || !pop ? null : 1000 * n / pop;
     };
-    /** Councils in a county whose planning feed stops well before the newest data (the layer names them) */
-    const planningStale = id => {
-        const p = data.planning;
-        const c = p?.counties?.[id];
+    /** What is wrong with a county's planning figures (the layer flags it): [{ name, issue: 'stale' | 'low' | 'missing', newest }] */
+    const planningIssues = id => {
+        const c = data.planning?.counties?.[id];
         if (!c?.incomplete) return [];
-        const top = Date.parse(p.sourceTime);
-        return c.authorities.filter(a => top - Date.parse(a.newest) > 21 * 86400000);
+        return [
+            ...c.authorities.filter(a => a.issue).map(a => ({ name: a.name, issue: a.issue, newest: a.newest })),
+            ...(c.missing || []).map(name => ({ name, issue: 'missing', newest: null }))
+        ];
+    };
+    /** "Incomplete: Dublin City Council feed out of date; Fingal County Council feed out of date" */
+    const planningTip = id => {
+        const list = planningIssues(id);
+        if (!list.length) return null;
+        const words = { stale: 'feed out of date', low: 'feed looks incomplete', missing: 'is missing from the data' };
+        return `Incomplete: ${list.map(a => `${a.name} ${words[a.issue]}`).join('; ')}`;
     };
     const dayName = date => new Date(date + 'T12:00:00Z').toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' });
     const euroL = n => n == null ? '–' : '€' + n.toFixed(3);
@@ -251,13 +259,11 @@
         planning: {
             label: 'Planning',
             stops: [[0.2, 'eef6f1'], [0.5, 'b9dccb'], [0.9, '5fae8c'], [1.3, '1f6b4f']],
-            value: id => per1000(data.planning?.counties?.[id]?.applications, id),
+            // An incomplete county is greyed out (no value) rather than coloured by an understated figure
+            value: id => data.planning?.counties?.[id]?.incomplete ? null : per1000(data.planning?.counties?.[id]?.applications, id),
             describe: v => v == null ? 'No data' : `${v.toFixed(1)} planning applications per 1,000 people in 30 days`,
-            note: id => {
-                const stale = planningStale(id);
-                return stale.length ? `(incomplete: ${stale.map(a => a.name.replace(/ County Council$/, '').replace(/ Council$/, '')).join(' and ')} feed out of date)` : '';
-            },
-            ends: ['0.2', '1.3+ per 1,000'], title: 'Planning applications received in 30 days, per 1,000 people (up to the newest data)'
+            tip: planningTip,
+            ends: ['0.2', '1.3+ per 1,000'], title: 'Planning applications per 1,000 people in 30 days'
         },
         homes: {
             label: 'New homes',
@@ -378,9 +384,8 @@
                 const id = feature.properties.id;
                 layer.bindTooltip(() => {
                     const v = VIEWS[view].value(id);
-                    const text = v == null && isNI(id) && !VIEWS[view].allIsland ? 'Not covered in Northern Ireland' : VIEWS[view].describe(v);
-                    const note = v != null && VIEWS[view].note ? VIEWS[view].note(id) : '';
-                    return `${esc(feature.properties.name)}<br><span class="popup-meta">${esc(text)}${note ? ' ' + esc(note) : ''}</span>`;
+                    const text = v == null && isNI(id) && !VIEWS[view].allIsland ? 'Not covered in Northern Ireland' : (v == null && VIEWS[view].tip?.(id)) || VIEWS[view].describe(v);
+                    return `${esc(feature.properties.name)}<br><span class="popup-meta">${esc(text)}</span>`;
                 },
                     { sticky: true, className: 'county-tip', direction: 'top', offset: [0, -6] });
                 layer.on({
@@ -1157,13 +1162,19 @@
         const plan = data.planning?.counties?.[id];
         if (plan && !ni) {
             const perK = per1000(plan.applications, id);
-            const stale = planningStale(id);
-            const day = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-IE', { day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' });
-            const staleNote = stale.length ? ` ${stale.map(a => `${a.name}'s figures stop at ${day(a.newest)}`).join('; ')}, so this is understated.` : '';
+            const issues = planningIssues(id);
+            const endYear = data.planning.period.to.slice(0, 4);
+            // The year is added when it differs from the year the period ends in ("4 Nov 2025")
+            const day = (iso, withYear) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-IE',
+                { day: 'numeric', month: 'short', ...(withYear || iso.slice(0, 4) !== endYear ? { year: 'numeric' } : {}), timeZone: 'Europe/Dublin' });
+            const sentence = a => a.issue === 'low' ? `${a.name}'s feed looks incomplete`
+                : a.issue === 'missing' ? `${a.name} is missing from the data`
+                : a.newest ? `${a.name}'s figures stop at ${day(a.newest)}` : `${a.name} has no recent figures`;
+            const staleNote = issues.length ? ` ${issues.map(sentence).join('; ')}, so this is understated.` : '';
             html += section('Planning applications', `
                 <div class="row"><span class="big">${esc(fmt(plan.applications))}</span><span class="soft">received${perK != null ? ` · ${esc(perK.toFixed(1))} per 1,000 people` : ''}</span></div>
                 <p class="muted">${esc(day(data.planning.period.from))} to ${esc(day(data.planning.period.to))}. Counts only, and councils record applications at different speeds.${esc(staleNote)}</p>
-                ${asOf(`Applications received to ${shortDate(data.planning.sourceTime)}`, hoursOld(data.planning.sourceTime) > 21 * 24)}`,
+                ${asOf(`Applications received to ${day(data.planning.period.to, true)}`, hoursOld(data.planning.period.to + 'T12:00:00Z') > 21 * 24)}`,
                 ['Planning Application Points', 'https://data-housinggovie.opendata.arcgis.com/datasets/housinggovie::planning-application-points']);
         }
 
