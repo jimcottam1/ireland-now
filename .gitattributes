@@ -1,0 +1,2 @@
+# Kept byte for byte as the Property Price Register publishes it (Windows line endings, Windows-1252)
+test/fixtures/ppr-sample.csv -text

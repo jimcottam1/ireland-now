@@ -15,7 +15,7 @@ async function run(t, buffer = csv, now = '2026-11-07T12:00:00Z') {
     return loadLayer('housing').fetchHousing();
 }
 
-const lines = csv.toString('latin1').split('\r\n');
+const lines = csv.toString('latin1').split(/\r?\n/);
 const without = test => Buffer.from(lines.filter(l => !test(l)).join('\r\n'), 'latin1');
 
 test('every county gets a median price from the sample', async t => {
