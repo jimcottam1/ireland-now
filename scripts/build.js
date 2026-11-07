@@ -42,6 +42,7 @@ const LAYERS = {
     beaches: [require('./layers/beaches').fetchBeaches, 24],
     tds: [require('./layers/tds').fetchTds, 24],
     housing: [require('./layers/housing').fetchHousing, 24],
+    homelessness: [require('./layers/homelessness').fetchHomelessness, 24],
     population: [require('./layers/population').fetchPopulation, 24 * 30],
     placenames: [require('./layers/placenames').fetchPlacenames, 24 * 30]
 };

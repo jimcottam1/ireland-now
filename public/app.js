@@ -3,7 +3,7 @@
     'use strict';
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
-        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'bikes', 'rnli'];
+        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'bikes', 'rnli', 'homelessness'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
@@ -1201,6 +1201,23 @@
                 ${spark([{ values: hist.map(r => r[1]), colour: '#7c3aed', label: 'Average rent' }], { labels: [quarterName(hist[0][0]), quarterName(hist[hist.length - 1][0])], unit: ' €' })}
                 ${asOf(`Figures for ${quarterName(data.rents.quarter)}, published ${shortDate(data.rents.published)}`, quarterAgeDays(data.rents.quarter) > 270)}`,
                 ['RTB', 'https://www.rtb.ie/data-insights/rtb-rent-index']);
+        }
+
+        // Homelessness (published by region, so a county shows its whole region)
+        const hlRegion = data.homelessness?.regions?.[data.homelessness.counties?.[id]?.region];
+        if (hlRegion && !ni) {
+            const [hy, hm] = data.homelessness.month.split('-').map(Number);
+            const hlMonth = new Date(Date.UTC(hy, hm - 1, 15)).toLocaleDateString('en-IE', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+            const hlAgeDays = (Date.now() - Date.UTC(hy, hm, 1)) / 86400000;   // since the end of the month counted
+            const area = hlRegion.counties.length > 1
+                ? `the ${hlRegion.name} region (${hlRegion.counties.map(nameOf).join(', ')})` : nameOf(hlRegion.counties[0]);
+            html += section('Homelessness', `
+                <div class="row"><span class="big">${esc(fmt(hlRegion.people))}</span><span class="soft">people in emergency accommodation</span>
+                ${hlRegion.change != null ? `<span class="pill ${hlRegion.change > 0 ? 'up' : 'down'}">${esc(pct(hlRegion.change))} on a year earlier</span>` : ''}</div>
+                <p class="muted">${esc(fmt(hlRegion.adults))} adults and ${esc(fmt(hlRegion.children))} children, including ${esc(fmt(hlRegion.families))} families, in ${esc(area)}.</p>
+                <p class="muted">Council-funded emergency accommodation during one week of the month. People sleeping rough, in domestic violence refuges or in asylum accommodation aren't counted.</p>
+                ${asOf(`Figures for ${hlMonth}`, hlAgeDays > 95)}`,
+                ['gov.ie', data.homelessness.source.url]);
         }
 
         // Planning applications (counts only)
