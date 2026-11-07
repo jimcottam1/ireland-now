@@ -74,9 +74,14 @@ async function fetchBuses() {
     if (!key) throw new Error('NTA_API_KEY is not set');
 
     const { routes } = await routeNames();
+    if (!Object.keys(routes).length) throw new Error('NTA timetable has no routes');
+    // No buses at all is genuine (Christmas Day), so check each answer is a GTFS-Realtime feed
+    const isFeed = f => Boolean(f?.header?.gtfs_realtime_version) && (f.entity === undefined || Array.isArray(f.entity));
     const vehicles = await realtime('Vehicles', key);
+    if (!isFeed(vehicles)) throw new Error('NTA Vehicles answer not recognised');
     await sleep(61000); // one request a minute
     const updates = await realtime('TripUpdates', key);
+    if (!isFeed(updates)) throw new Error('NTA TripUpdates answer not recognised');
 
     // Delay for each trip: the first upcoming stop's arrival (or departure) delay, in seconds
     const delays = new Map();

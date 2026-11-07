@@ -2,7 +2,10 @@
 // the 12 months before. Uses full-market-price sales only.
 const AdmZip = require('adm-zip');
 const { getBuffer } = require('../lib/http');
-const { countyFromName } = require('../lib/geo');
+const { countyFromName, ROI_IDS } = require('../lib/geo');
+
+// Sales are filed within weeks; a newest sale older than this means the file has stopped updating
+const MAX_LATEST_SALE_DAYS = 90;
 
 const SOURCE = {
     name: 'Property Price Register',
@@ -41,6 +44,7 @@ function median(values) {
 async function fetchHousing() {
     const zip = new AdmZip(await getBuffer(ZIP, { timeoutMs: 120000 }));
     const entry = zip.getEntries().find(e => /\.csv$/i.test(e.entryName));
+    if (!entry) throw new Error('Property Price Register zip has no CSV in it');
     // The register is published in Windows-1252 (the € sign is byte 0x80), which latin1 reads well enough here
     const lines = zip.readFile(entry).toString('latin1').split(/\r?\n/);
 
@@ -50,6 +54,9 @@ async function fetchHousing() {
     const iCounty = col('county');
     const iPrice = col('price');
     const iNotFull = col('not full market');
+    const missingCols = Object.entries({ 'date of sale': iDate, county: iCounty, price: iPrice, 'not full market price': iNotFull })
+        .filter(([, i]) => i < 0).map(([name]) => name);
+    if (missingCols.length) throw new Error(`Property Price Register columns changed (missing ${missingCols.join(', ')})`);
 
     const now = new Date();
     const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
@@ -73,6 +80,12 @@ async function fetchHousing() {
         (bucket[county] = bucket[county] || []).push(price);
         if (!latestSale || date > latestSale) latestSale = date;
     }
+
+    if (!latestSale || now - latestSale > MAX_LATEST_SALE_DAYS * 86400000) {
+        throw new Error(`Property Price Register latest sale is ${latestSale ? latestSale.toDateString() : 'missing'}, so the file has stopped updating`);
+    }
+    const noSales = ROI_IDS.filter(id => !recent[id]);
+    if (noSales.length) throw new Error(`Property Price Register has no sales in the last year for ${noSales.join(', ')}`);
 
     const counties = {};
     const all = [];

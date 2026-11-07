@@ -12,7 +12,10 @@ const tag = (block, name) => (block.match(new RegExp(`<${name}>([\\s\\S]*?)</${n
 
 async function fetchTrains() {
     const xml = await getText('http://api.irishrail.ie/realtime/realtime.asmx/getCurrentTrainsXML');
+    // No trains at all is genuine (overnight, Christmas Day), so check the answer is the train list itself
+    if (!/<ArrayOfObjTrainPositions[\s>/]/.test(xml)) throw new Error('Irish Rail answer not recognised (no train list)');
     const blocks = xml.match(/<objTrainPositions>[\s\S]*?<\/objTrainPositions>/g) || [];
+    if (blocks.length && !blocks.some(b => tag(b, 'TrainCode'))) throw new Error('Irish Rail layout changed (no train codes)');
 
     const trains = blocks.map(block => {
         // PublicMessage looks like "A123\n14:05 - Cork to Dublin Heuston (5 mins late)\nArrived Thurles next stop..."

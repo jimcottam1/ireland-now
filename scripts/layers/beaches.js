@@ -8,8 +8,14 @@ const SOURCE = {
     licence: 'CC BY 4.0'
 };
 
+// Ireland has about 240 designated bathing waters; far fewer means a broken or partial answer
+const MIN_BEACHES = 150;
+
 async function fetchBeaches() {
     const raw = await getJson('https://data.epa.ie/bw/api/v1/locations?per_page=500', { timeoutMs: 60000 });
+    if (!Array.isArray(raw?.list)) throw new Error('EPA beaches answer not recognised (no list)');
+    if (Number.isFinite(raw.count) && raw.list.length < raw.count) throw new Error(`EPA beaches: got ${raw.list.length} of ${raw.count} bathing waters`);
+    if (raw.list.length < MIN_BEACHES) throw new Error(`EPA beaches: only ${raw.list.length} bathing waters (there are about 240)`);
 
     const beaches = raw.list.map(b => ({
         name: b.beach_name,
