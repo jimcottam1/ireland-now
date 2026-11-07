@@ -597,6 +597,9 @@
 
     const TREND_COLOURS = { 'rising-fast': '#d7263d', rising: '#ef8a1f', steady: '#3d7ea6', falling: '#1f8a5b', unknown: '#7c8b85' };
     const WATER_COLOURS = { 'do-not-drink': '#a4132a', 'boil-water': '#d7263d', restrictions: '#ef8a1f', outage: '#2f6fd6', 'low-pressure': '#5b9bd5', discolouration: '#8d6cc9', works: '#7c8b85' };
+    /** "Mon 9 Nov, 09:00 to Mon 9 Nov, 17:00", or for a notice in force until lifted "since 5 Jan 2025, until further notice" */
+    const waterSpan = n => n.end ? `${when(n.start)} to ${when(n.end)}`
+        : `since ${new Date(n.start).toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Dublin' })}, until further notice`;
     const WATER_LABELS = { 'do-not-drink': 'Do not drink', 'boil-water': 'Boil water', restrictions: 'Restrictions', outage: 'Supply interruption', 'low-pressure': 'Low pressure', discolouration: 'Discolouration', works: 'Works' };
 
     const OVERLAYS = {
@@ -611,7 +614,7 @@
                     <span class="pill">${esc(WATER_LABELS[n.kind] || n.kind)}</span>${n.active ? '<span class="pill warn">Now</span>' : '<span class="pill">Upcoming</span>'}<br>
                     <span class="popup-meta">${n.issuer === 'NI Water'
                         ? `Updated ${esc(when(n.updated))}${n.end ? ` · expected back ${esc(when(n.end))}` : ''}`
-                        : `${esc(when(n.start))} to ${esc(when(n.end))}`}</span>
+                        : esc(waterSpan(n))}</span>
                     <p style="margin-top:6px">${esc(n.description.slice(0, 280))}${n.description.length > 280 ? '…' : ''}</p>
                     ${n.issuer === 'NI Water'
                         ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">NI Water service updates</a>`
@@ -1126,7 +1129,7 @@
             html += section(`Water notices (${list.length})`, list.length ? `<ul class="list">${list.slice(0, 8).map(n => `
                 <li><strong>${esc(n.title)}</strong><br>
                 <span class="pill">${esc(WATER_LABELS[n.kind] || n.kind)}</span>${n.active ? '<span class="pill warn">Now</span>' : ''}
-                <span class="meta">${n.issuer === 'NI Water' ? `updated ${esc(when(n.updated))}${n.end ? `, expected back ${esc(when(n.end))}` : ''}` : `${esc(when(n.start))} to ${esc(when(n.end))}`}</span></li>`).join('')}</ul>
+                <span class="meta">${n.issuer === 'NI Water' ? `updated ${esc(when(n.updated))}${n.end ? `, expected back ${esc(when(n.end))}` : ''}` : esc(waterSpan(n))}</span></li>`).join('')}</ul>
                 ${list.length > 8 ? `<p class="muted">and ${list.length - 8} more</p>` : ''}` : '<p class="soft">No current or upcoming notices.</p>',
                 ni ? ['NI Water', 'https://www.niwater.com/whats-happening-in-your-area/current-service-updates'] : ['water.ie', 'https://www.water.ie/water-service-updates']);
         } else html += section('Water notices', unavailable);
