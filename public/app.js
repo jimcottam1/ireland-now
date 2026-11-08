@@ -3,14 +3,14 @@
     'use strict';
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
-        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'bikes', 'rnli', 'homelessness'];
+        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'bikes', 'rnli', 'homelessness', 'webcams'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
     let countyLayer = null;
     let selected = null;   // county id
     let view = 'warnings';
-    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false, bikes: false, rnli: false };
+    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false, bikes: false, rnli: false, webcams: false };
     const overlayLayers = {};
 
     // ---------- Helpers ----------
@@ -475,6 +475,12 @@
         e.popup.getElement()?.addEventListener('click', ev => {
             const b = ev.target.closest('[data-pick]');
             if (b && pickList[b.dataset.pick]) openPoint(pickList[b.dataset.pick]);
+            const cam = ev.target.closest('[data-cam]');
+            if (cam) {
+                // Keep this click to the popup: on the map it would close the popup, and the page would toggle it again
+                ev.stopPropagation();
+                toggleCam(cam, e.popup);
+            }
         });
     });
 
@@ -733,8 +739,60 @@
                     ${data.rnli.sourceTime ? `<span class="popup-meta">Newest launch in RNLI feed: ${esc(clock(data.rnli.sourceTime))}</span><br>` : ''}
                     ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Station page on rnli.org</a>` : ''}`);
             }))
+        },
+        webcams: {
+            label: 'Webcams', colour: '#be185d',
+            build: () => L.layerGroup((data.webcams?.webcams || []).map(w => L.circleMarker([w.lat, w.lon], {
+                radius: 6, weight: 1.5, color: '#fff', fillColor: camOld(w) ? '#e3a6c4' : '#be185d', fillOpacity: 0.95
+            }).bindPopup(`<strong>${esc(w.name)}</strong>${w.place ? ` <span class="popup-meta">${esc(w.place)}</span>` : ''}<br>
+                ${camAge(w)}<br>
+                ${camBlock(w)}
+                ${windyLink(w) ? `<a href="${esc(windyLink(w))}" target="_blank" rel="noopener">Watch on Windy.com ↗</a><br>` : ''}
+                <span class="popup-meta">Webcams provided by <a href="https://www.windy.com/" target="_blank" rel="noopener">Windy.com</a></span>`)))
         }
     };
+
+    // Webcams: a picture not updated for a day is probably a stuck camera
+    const camOld = w => !w.updated || hoursOld(w.updated) > 24;
+    const camAge = w => w.updated
+        ? `<span class="popup-meta${camOld(w) ? ' old' : ''}">${camOld(w) ? '⚠ ' : ''}Picture updated ${esc(ago(w.updated))}</span>`
+        : '<span class="popup-meta old">⚠ Picture update time unknown</span>';
+    const windyLink = w => /^https:\/\/(www\.)?windy\.com\/webcams\/\d+$/.test(w.url || '') ? w.url : null;
+    const playerLink = w => /^https:\/\/webcams\.windy\.com\/webcams\/public\/embed\/player\/\d+\/day$/.test(w.player || '') ? w.player : null;
+
+    /** A "Show camera" button with an empty box; the player only loads when it's opened. */
+    const camBlock = w => playerLink(w)
+        ? `<div class="cam"><button type="button" class="cam-toggle" data-cam="${esc(w.id)}" aria-expanded="false">Show camera ▾</button><div class="cam-box"></div></div>`
+        : '';
+
+    /** Open or close a camera's Windy player under its button. */
+    function toggleCam(button, popup) {
+        // Leaflet rebuilds a popup from its HTML text on update(), which would throw the player away;
+        // swap the text for a live element first, so update() only re-measures it
+        if (popup && typeof popup.getContent() === 'string') {
+            const node = document.createElement('div');
+            node.innerHTML = popup.getContent();
+            popup.setContent(node);
+            button = node.querySelector(`[data-cam="${CSS.escape(button.dataset.cam)}"]`);
+            if (!button) return;
+        }
+        const box = button.parentElement.querySelector('.cam-box');
+        const open = button.getAttribute('aria-expanded') === 'true';
+        if (open) {
+            box.innerHTML = '';
+        } else {
+            const w = (data.webcams?.webcams || []).find(x => String(x.id) === button.dataset.cam);
+            const src = w && playerLink(w);
+            if (!src) return;
+            // In a map popup the width is fixed (popups shrink to their content); in the panel it fills the column
+            const width = popup ? `width:${Math.max(200, POPUP.maxWidth - 50)}px` : '';
+            box.innerHTML = `<iframe src="${esc(src)}" title="${esc(`Webcam: ${w.name}`)}" style="${width}" loading="lazy" allowfullscreen
+                sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>`;
+        }
+        button.setAttribute('aria-expanded', String(!open));
+        button.textContent = open ? 'Show camera ▾' : 'Hide camera ▴';
+        popup?.update();
+    }
 
     const rnliCount = n => `${n} launch${n === 1 ? '' : 'es'} in the last 7 days`;
     /** The launch feed only holds about a day, so early on we have fewer than seven days of history. */
@@ -759,10 +817,11 @@
         buses: [['#c2410c', 'On time'], ['#ef8a1f', '5+ min late'], ['#d7263d', '10+ min late'], ['#7c8b85', 'No delay information']],
         luas: [['#d7263d', 'Red Line stop'], ['#1f8a5b', 'Green Line stop']],
         bikes: [['#0b7c86', '5 or more bikes'], ['#e0a800', '1 to 4 bikes'], ['#8b3a62', 'No bikes'], ['#7c8b85', 'Station closed']],
-        rnli: [['#1d4ed8', 'Launched in the last 7 days (bigger = more)'], ['#93b4e8', 'No launches in the last 7 days']]
+        rnli: [['#1d4ed8', 'Launched in the last 7 days (bigger = more)'], ['#93b4e8', 'No launches in the last 7 days']],
+        webcams: [['#be185d', 'Webcam (opens on Windy.com)'], ['#e3a6c4', 'Picture not updated for over a day']]
     };
 
-    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', bikes: 'Bike station', rnli: 'Lifeboat station' };
+    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', bikes: 'Bike station', rnli: 'Lifeboat station', webcams: 'Webcam' };
 
     // Dense overlays merge into numbered bubbles when zoomed out; sparse ones (their dots carry meaning) never do
     const CLUSTERED = ['water', 'rivers', 'buses', 'bikes', 'luas'];
@@ -821,6 +880,9 @@
             overlays[key] ? overlayLayers[key].addTo(map) : overlayLayers[key].remove();
             renderControls(); renderLegend(); updateHash();
         }
+        // Webcam players in the county panel (map popups handle their own, in the popupopen listener)
+        const cam = e.target.closest('[data-cam]');
+        if (cam && !cam.closest('.leaflet-popup')) toggleCam(cam, null);
         if (e.target.closest('[data-cards]')) {
             const open = document.getElementById('national').classList.contains('collapsed');
             try { localStorage.setItem('cards-expanded', open ? '1' : '0'); } catch { /* private mode */ }
@@ -1183,6 +1245,9 @@
         // Lifeboat launches (all-island, coastal and lake counties only)
         html += rnliCountySection(id);
 
+        // Webcams (all-island; only counties that have one)
+        html += webcamsSection(id);
+
         // House prices
         const h = data.housing?.counties?.[id];
         if (!ni) html += section('House prices', h ? `
@@ -1343,6 +1408,17 @@
             <p class="muted">${esc(fmt(b.totals.open))} of ${esc(fmt(b.totals.stations))} stations open</p>
             ${b.sourceTime ? asOf(`Updated ${clock(b.sourceTime)}`, hoursOld(b.sourceTime) > 2) : ''}`,
             ['dublinbikes.ie', 'https://www.dublinbikes.ie/']);
+    }
+
+    // Webcams in a county, each linking to its page on Windy.com (Windy's terms ask for the link and the credit line)
+    function webcamsSection(id) {
+        const list = (data.webcams?.webcams || []).filter(w => w.county === id && windyLink(w));
+        if (!list.length) return '';
+        return section('Webcams', `
+            <ul class="list">${list.map(w => `<li><a href="${esc(windyLink(w))}" target="_blank" rel="noopener">${esc(w.name)}</a>${w.place ? ` <span class="muted">${esc(w.place)}</span>` : ''}
+                <span class="meta${camOld(w) ? ' old' : ''}">${camOld(w) ? '⚠ ' : ''}${w.updated ? esc(ago(w.updated)) : 'time unknown'}</span>${camBlock(w)}</li>`).join('')}</ul>
+            <p class="muted">Times show when each picture last changed. Webcams provided by <a href="https://www.windy.com/" target="_blank" rel="noopener">Windy.com</a>.</p>`,
+            ['windy.com', 'https://www.windy.com/webcams']);
     }
 
     // RNLI lifeboat launches over the last 7 days

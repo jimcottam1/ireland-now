@@ -25,6 +25,7 @@ const LAYERS = {
     luas: [require('./layers/luas').fetchLuas, 0],
     bikes: [require('./layers/bikes').fetchBikes, 0],
     rnli: [require('./layers/rnli').fetchRnli, 0], // the station list is cached for 30 days inside the layer
+    webcams: [require('./layers/webcams').fetchWebcams, 0],
     marine: [require('./layers/marine').fetchMarine, 0],
     observations: [require('./layers/observations').fetchObservations, 0],
     airquality: [require('./layers/airquality').fetchAirQuality, 0],

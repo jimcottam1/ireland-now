@@ -1,0 +1,239 @@
+{
+ "total": 8,
+ "webcams": [
+  {
+   "title": "Kenmare Municipal District: Caherdaniel ED: Derrynane",
+   "viewCount": 366748,
+   "webcamId": 1250613112,
+   "status": "active",
+   "lastUpdatedOn": "2026-11-08T20:36:36.000Z",
+   "location": {
+    "city": "Kenmare Municipal District",
+    "region": "Munster",
+    "region_code": "IE.M",
+    "country": "Ireland",
+    "country_code": "IE",
+    "continent": "Europe",
+    "continent_code": "EU",
+    "latitude": 51.74627,
+    "longitude": -10.12836
+   },
+   "player": {
+    "day": "https://webcams.windy.com/webcams/public/embed/player/1250613112/day",
+    "month": "https://webcams.windy.com/webcams/public/embed/player/1250613112/month",
+    "year": "https://webcams.windy.com/webcams/public/embed/player/1250613112/year",
+    "lifetime": "https://webcams.windy.com/webcams/public/embed/player/1250613112/lifetime"
+   },
+   "urls": {
+    "detail": "https://windy.com/webcams/1250613112",
+    "edit": "https://webcams-admin.windy.com/webcams/1250613112",
+    "provider": "http://lambsheadcam.sccbroadband.ie/"
+   }
+  },
+  {
+   "title": "Dublin › West: GPO Museum",
+   "viewCount": 165267,
+   "webcamId": 1613986305,
+   "status": "active",
+   "lastUpdatedOn": "2026-11-08T20:36:42.000Z",
+   "location": {
+    "city": "Dublin",
+    "region": "Leinster",
+    "region_code": "IE.L",
+    "country": "Ireland",
+    "country_code": "IE",
+    "continent": "Europe",
+    "continent_code": "EU",
+    "latitude": 53.34971,
+    "longitude": -6.25988
+   },
+   "player": {
+    "day": "https://webcams.windy.com/webcams/public/embed/player/1613986305/day",
+    "month": "https://webcams.windy.com/webcams/public/embed/player/1613986305/month",
+    "year": "https://webcams.windy.com/webcams/public/embed/player/1613986305/year",
+    "lifetime": "https://webcams.windy.com/webcams/public/embed/player/1613986305/lifetime"
+   },
+   "urls": {
+    "detail": "https://windy.com/webcams/1613986305",
+    "edit": "https://webcams-admin.windy.com/webcams/1613986305",
+    "provider": "https://www.carrollsirishgifts.com/dublinwebcam.html"
+   }
+  },
+  {
+   "title": "Moycullen: Weather Cam",
+   "viewCount": 147024,
+   "webcamId": 1321017273,
+   "status": "active",
+   "lastUpdatedOn": "2026-11-08T20:46:18.000Z",
+   "location": {
+    "city": "Moycullen",
+    "region": "Connacht",
+    "region_code": "IE.C",
+    "country": "Ireland",
+    "country_code": "IE",
+    "continent": "Europe",
+    "continent_code": "EU",
+    "latitude": 53.32994,
+    "longitude": -9.17616
+   },
+   "player": {
+    "day": "https://webcams.windy.com/webcams/public/embed/player/1321017273/day",
+    "month": "https://webcams.windy.com/webcams/public/embed/player/1321017273/month",
+    "year": "https://webcams.windy.com/webcams/public/embed/player/1321017273/year",
+    "lifetime": "https://webcams.windy.com/webcams/public/embed/player/1321017273/lifetime"
+   },
+   "urls": {
+    "detail": "https://windy.com/webcams/1321017273",
+    "edit": "https://webcams-admin.windy.com/webcams/1321017273",
+    "provider": "http://www.moycullenweather.com/wxwebcam.php"
+   }
+  },
+  {
+   "title": "Howth › North",
+   "viewCount": 51437,
+   "webcamId": 1672752907,
+   "status": "active",
+   "lastUpdatedOn": "2026-11-08T20:46:10.000Z",
+   "location": {
+    "city": "unknown",
+    "region": "Leinster",
+    "region_code": "IE.L",
+    "country": "Ireland",
+    "country_code": "IE",
+    "continent": "Europe",
+    "continent_code": "EU",
+    "latitude": 53.38583,
+    "longitude": -6.06512
+   },
+   "player": {
+    "live": "https://webcams.windy.com/webcams/public/embed/player/1672752907/live",
+    "day": "https://webcams.windy.com/webcams/public/embed/player/1672752907/day",
+    "month": "https://webcams.windy.com/webcams/public/embed/player/1672752907/month",
+    "year": "https://webcams.windy.com/webcams/public/embed/player/1672752907/year",
+    "lifetime": "https://webcams.windy.com/webcams/public/embed/player/1672752907/lifetime"
+   },
+   "urls": {
+    "detail": "https://windy.com/webcams/1672752907",
+    "edit": "https://webcams-admin.windy.com/webcams/1672752907",
+    "provider": "https://ipcamlive.com/6064c5225a862"
+   }
+  },
+  {
+   "title": "Bangor › North-east: Ballyholme Yacht Club",
+   "viewCount": 49539,
+   "webcamId": 1620598588,
+   "status": "active",
+   "lastUpdatedOn": "2026-11-08T20:37:05.000Z",
+   "location": {
+    "city": "Bangor",
+    "region": "Northern Ireland",
+    "region_code": "GB.NIR",
+    "country": "United Kingdom",
+    "country_code": "GB",
+    "continent": "Europe",
+    "continent_code": "EU",
+    "latitude": 54.66805,
+    "longitude": -5.65311
+   },
+   "player": {
+    "day": "https://webcams.windy.com/webcams/public/embed/player/1620598588/day",
+    "month": "https://webcams.windy.com/webcams/public/embed/player/1620598588/month",
+    "year": "https://webcams.windy.com/webcams/public/embed/player/1620598588/year",
+    "lifetime": "https://webcams.windy.com/webcams/public/embed/player/1620598588/lifetime"
+   },
+   "urls": {
+    "detail": "https://windy.com/webcams/1620598588",
+    "edit": "https://webcams-admin.windy.com/webcams/1620598588",
+    "provider": "https://ballyholme.com/ballyholme-webcam/"
+   }
+  },
+  {
+   "title": "St Davids › South-west: St Justinian's",
+   "viewCount": 7773,
+   "webcamId": 1793900806,
+   "status": "active",
+   "lastUpdatedOn": "2026-11-08T20:43:48.000Z",
+   "location": {
+    "city": "St Davids",
+    "region": "Wales",
+    "region_code": "GB.WLS",
+    "country": "United Kingdom",
+    "country_code": "GB",
+    "continent": "Europe",
+    "continent_code": "EU",
+    "latitude": 51.87886,
+    "longitude": -5.30873
+   },
+   "player": {
+    "day": "https://webcams.windy.com/webcams/public/embed/player/1793900806/day",
+    "month": "https://webcams.windy.com/webcams/public/embed/player/1793900806/month",
+    "year": "https://webcams.windy.com/webcams/public/embed/player/1793900806/year",
+    "lifetime": "https://webcams.windy.com/webcams/public/embed/player/1793900806/lifetime"
+   },
+   "urls": {
+    "detail": "https://windy.com/webcams/1793900806",
+    "edit": "https://webcams-admin.windy.com/webcams/1793900806",
+    "provider": "https://www.camsecure.co.uk/st_justinians_webcam.html"
+   }
+  },
+  {
+   "title": "Killarney Municipal District: Killarney Urban ED: Killarney - Munster, Irland",
+   "viewCount": 167793,
+   "webcamId": 1574367301,
+   "status": "active",
+   "lastUpdatedOn": "2026-11-08T20:37:20.000Z",
+   "location": {
+    "city": "Killarney Municipal District",
+    "region": "Munster",
+    "region_code": "IE.M",
+    "country": "Ireland",
+    "country_code": "IE",
+    "continent": "Europe",
+    "continent_code": "EU",
+    "latitude": 52.03832,
+    "longitude": -9.49978
+   },
+   "player": {
+    "day": "https://webcams.windy.com/webcams/public/embed/player/1574367301/day",
+    "month": "https://webcams.windy.com/webcams/public/embed/player/1574367301/month",
+    "year": "https://webcams.windy.com/webcams/public/embed/player/1574367301/year",
+    "lifetime": "https://webcams.windy.com/webcams/public/embed/player/1574367301/lifetime"
+   },
+   "urls": {
+    "detail": "https://windy.com/webcams/1574367301",
+    "edit": "https://webcams-admin.windy.com/webcams/1574367301",
+    "provider": "https://webcam.lakehotelkillarney.ie/"
+   }
+  },
+  {
+   "title": "Galway: Old Camera",
+   "viewCount": 101090,
+   "webcamId": 1000000001,
+   "status": "inactive",
+   "lastUpdatedOn": "2026-11-08T20:36:47.000Z",
+   "location": {
+    "city": "Galway",
+    "region": "Connacht",
+    "region_code": "IE.C",
+    "country": "Ireland",
+    "country_code": "IE",
+    "continent": "Europe",
+    "continent_code": "EU",
+    "latitude": 53.24807,
+    "longitude": -9.20118
+   },
+   "player": {
+    "live": "https://webcams.windy.com/webcams/public/embed/player/1607328816/live",
+    "day": "https://webcams.windy.com/webcams/public/embed/player/1607328816/day",
+    "month": "https://webcams.windy.com/webcams/public/embed/player/1607328816/month",
+    "year": "https://webcams.windy.com/webcams/public/embed/player/1607328816/year",
+    "lifetime": "https://webcams.windy.com/webcams/public/embed/player/1607328816/lifetime"
+   },
+   "urls": {
+    "detail": "https://windy.com/webcams/1607328816",
+    "edit": "https://webcams-admin.windy.com/webcams/1607328816",
+    "provider": "https://www.connemaracoasthotel.ie/galway-bay-webcam"
+   }
+  }
+ ]
+}

@@ -48,6 +48,7 @@ jobs:
           NTA_API_KEY: ${{ secrets.NTA_API_KEY }}
           JCDECAUX_API_KEY: ${{ secrets.JCDECAUX_API_KEY }}
           LOGAINM_API_KEY: ${{ secrets.LOGAINM_API_KEY }}
+          WINDY_API_KEY: ${{ secrets.WINDY_API_KEY }}
         run: npm run build
 
       - name: Save state

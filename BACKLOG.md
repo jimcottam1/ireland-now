@@ -15,6 +15,7 @@ Ideas waiting to be built, roughly in priority order. Agents pick from here; the
 - **ESB historical outages:** outages by county 2021–2024 from ESB's FOI disclosure log, if the figures are published there.
 
 ## Waiting on someone else
+- **Road cameras (TII, TrafficwatchNI):** live motorway and road camera pictures. TII's open data (CC BY 4.0) doesn't include the camera images, and no reuse terms were found for trafficinfo.ie or TrafficwatchNI cameras. Needs an email to opendata@tii.ie (and DfI) first. Checked 8 Nov 2026.
 - **Power cuts (ESB PowerCheck):** no public API; `robots.txt` blocks it. Waiting on the owner's email to ESB.
 
 ## Quality

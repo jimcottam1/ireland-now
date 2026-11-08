@@ -1,6 +1,6 @@
 // Keep API keys out of anything we publish (status.json) or post (GitHub issues).
 // Error messages can quote a URL or a response body, and some keys travel in the query string.
-const KEY_NAMES = ['NTA_API_KEY', 'JCDECAUX_API_KEY', 'LOGAINM_API_KEY'];
+const KEY_NAMES = ['NTA_API_KEY', 'JCDECAUX_API_KEY', 'LOGAINM_API_KEY', 'WINDY_API_KEY'];
 
 function redact(text) {
     let out = String(text ?? '');
