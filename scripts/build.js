@@ -44,6 +44,10 @@ const LAYERS = {
     tds: [require('./layers/tds').fetchTds, 24],
     housing: [require('./layers/housing').fetchHousing, 24],
     homelessness: [require('./layers/homelessness').fetchHomelessness, 24],
+    waitinglists: [require('./layers/waitinglists').fetchWaitingLists, 24],
+    attractions: [require('./layers/attractions').fetchAttractions, 24],
+    trails: [require('./layers/trails').fetchTrails, 24],
+    heritage: [require('./layers/heritage').fetchHeritage, 24 * 7],
     population: [require('./layers/population').fetchPopulation, 24 * 30],
     placenames: [require('./layers/placenames').fetchPlacenames, 24 * 30]
 };

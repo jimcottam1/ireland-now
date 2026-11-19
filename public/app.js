@@ -3,14 +3,15 @@
     'use strict';
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
-        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'bikes', 'rnli', 'homelessness', 'webcams'];
+        'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'bikes', 'rnli', 'homelessness', 'webcams',
+        'waitinglists', 'heritage', 'attractions', 'trails'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
     let countyLayer = null;
     let selected = null;   // county id
     let view = 'warnings';
-    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false, bikes: false, rnli: false, webcams: false };
+    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false, bikes: false, rnli: false, webcams: false, heritage: false, attractions: false, trails: false };
     const overlayLayers = {};
 
     // ---------- Helpers ----------
@@ -749,7 +750,46 @@
                 ${camBlock(w)}
                 ${windyLink(w) ? `<a href="${esc(windyLink(w))}" target="_blank" rel="noopener">Watch on Windy.com ↗</a><br>` : ''}
                 <span class="popup-meta">Webcams provided by <a href="https://www.windy.com/" target="_blank" rel="noopener">Windy.com</a></span>`)))
+        },
+        heritage: {
+            label: 'Heritage sites', colour: '#7a4a1f',
+            build: () => L.layerGroup((data.heritage?.sites || []).map(s => L.circleMarker([s.lat, s.lon], {
+                radius: 6, weight: 1.5, color: '#fff', fillColor: '#7a4a1f', fillOpacity: 0.95
+            }).bindPopup(`<strong>${esc(s.name)}</strong> <span class="popup-meta">${esc(s.kind)}</span>
+                <p style="margin-top:6px">${esc(s.about)}</p>
+                ${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">More about this site ↗</a><br>` : ''}
+                <span class="popup-meta">National Monuments Service · record ${esc(s.smr)}</span>`)))
+        },
+        attractions: {
+            label: 'Attractions', colour: '#d97706',
+            build: () => L.layerGroup((data.attractions?.attractions || []).map(a => L.circleMarker([a.lat, a.lon], {
+                radius: 4.5, weight: 1, color: '#fff', fillColor: ATTRACTION_KINDS[a.kind][0], fillOpacity: 0.95
+            }).bindPopup(`<strong>${esc(a.name)}</strong> <span class="popup-meta">${esc(ATTRACTION_KINDS[a.kind][1])}</span><br>
+                ${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">Website ↗</a><br>` : ''}
+                <span class="popup-meta">Listed by Fáilte Ireland</span>`)))
+        },
+        trails: {
+            label: 'Trails', colour: '#4d7c0f',
+            build: () => L.layerGroup((data.trails?.trails || []).map(t => L.circleMarker([t.lat, t.lon], {
+                radius: 4.5, weight: 1, color: '#fff', fillColor: TRAIL_GROUPS[t.group][0], fillOpacity: 0.95
+            }).bindPopup(`<strong>${esc(t.name)}</strong> <span class="popup-meta">${esc(t.type)}</span><br>
+                ${t.km ? `${esc(t.km.toLocaleString('en-IE'))} km · ` : ''}the dot marks where the trail starts<br>
+                <a href="https://www.sportireland.ie/outdoors" target="_blank" rel="noopener">Sport Ireland Outdoors ↗</a>`)))
         }
+    };
+
+    // Attraction and trail dot colours: [colour, words]
+    const ATTRACTION_KINDS = {
+        history: ['#9a3412', 'Castle, abbey or historic house'],
+        museum: ['#7c3aed', 'Museum or gallery'],
+        nature: ['#15803d', 'Nature, gardens or beach'],
+        other: ['#d97706', 'Other attraction']
+    };
+    const TRAIL_GROUPS = {
+        walk: ['#4d7c0f', 'Walking'],
+        cycle: ['#0369a1', 'Cycling'],
+        water: ['#0891b2', 'Paddling or snorkelling'],
+        other: ['#7c8b85', 'Other']
     };
 
     // Webcams: a picture not updated for a day is probably a stuck camera
@@ -818,13 +858,16 @@
         luas: [['#d7263d', 'Red Line stop'], ['#1f8a5b', 'Green Line stop']],
         bikes: [['#0b7c86', '5 or more bikes'], ['#e0a800', '1 to 4 bikes'], ['#8b3a62', 'No bikes'], ['#7c8b85', 'Station closed']],
         rnli: [['#1d4ed8', 'Launched in the last 7 days (bigger = more)'], ['#93b4e8', 'No launches in the last 7 days']],
-        webcams: [['#be185d', 'Webcam (opens on Windy.com)'], ['#e3a6c4', 'Picture not updated for over a day']]
+        webcams: [['#be185d', 'Webcam (opens on Windy.com)'], ['#e3a6c4', 'Picture not updated for over a day']],
+        heritage: [['#7a4a1f', 'Historic site you can visit']],
+        attractions: Object.values(ATTRACTION_KINDS).map(([c, w]) => [c, w]),
+        trails: Object.values(TRAIL_GROUPS).map(([c, w]) => [c, `${w} (dot where it starts)`])
     };
 
-    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', bikes: 'Bike station', rnli: 'Lifeboat station', webcams: 'Webcam' };
+    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', bikes: 'Bike station', rnli: 'Lifeboat station', webcams: 'Webcam', heritage: 'Heritage site', attractions: 'Attraction', trails: 'Trail' };
 
     // Dense overlays merge into numbered bubbles when zoomed out; sparse ones (their dots carry meaning) never do
-    const CLUSTERED = ['water', 'rivers', 'buses', 'bikes', 'luas'];
+    const CLUSTERED = ['water', 'rivers', 'buses', 'bikes', 'luas', 'attractions', 'trails'];
     const canCluster = typeof L.markerClusterGroup === 'function';   // false if the library was blocked: plain dots then
     const bubbleSize = n => n < 10 ? 34 : n < 100 ? 42 : 52;
 
@@ -1148,6 +1191,9 @@
                 : '<p class="soft">No hospital in this county reports trolley numbers.</p>', ['HSE', 'https://uec.hse.ie/uec/TGAR.php']);
         }
 
+        // Hospital waiting lists (by hospital, so counties without a public hospital have none)
+        if (!ni) html += waitingListSection(id);
+
         // Jobs and new homes
         const ec = data.economy?.counties?.[id];
         if (ec) {
@@ -1247,6 +1293,10 @@
 
         // Webcams (all-island; only counties that have one)
         html += webcamsSection(id);
+
+        // Things to see and trails
+        if (!ni) html += thingsToSeeSection(id);
+        html += trailsSection(id);
 
         // House prices
         const h = data.housing?.counties?.[id];
@@ -1363,6 +1413,7 @@
             ${rnliNationalSection()}
             ${electricitySection()}
             ${trolleySection()}
+            ${waitingListNationalSection()}
             ${fuelSection()}
             ${dailSection()}
             ${spaceSection()}
@@ -1419,6 +1470,73 @@
                 <span class="meta${camOld(w) ? ' old' : ''}">${camOld(w) ? '⚠ ' : ''}${w.updated ? esc(ago(w.updated)) : 'time unknown'}</span>${camBlock(w)}</li>`).join('')}</ul>
             <p class="muted">Times show when each picture last changed. Webcams provided by <a href="https://www.windy.com/" target="_blank" rel="noopener">Windy.com</a>.</p>`,
             ['windy.com', 'https://www.windy.com/webcams']);
+    }
+
+    // NTPF waiting lists: a month's count, published a few weeks after the day it was taken
+    function waitingAge() {
+        const w = data.waitinglists;
+        return asOf(`Waiting lists on ${shortDate(w.date + 'T12:00:00Z')}`, hoursOld(w.date + 'T12:00:00Z') > 70 * 24);
+    }
+    const waitingChange = n => n == null ? '' : `<span class="pill ${n > 0 ? 'up' : 'down'}">${esc(pct(n))} on a year earlier</span>`;
+
+    function waitingListSection(id) {
+        const w = data.waitinglists;
+        if (!w) return '';
+        const c = w.counties[id];
+        const link = ['ntpf.ie', 'https://www.ntpf.ie/waiting-list-data/'];
+        if (!c) return section('Hospital waiting lists', `<p class="soft">No public hospital in ${esc(nameOf(id))} reports a waiting list. People here are usually seen in a neighbouring county.</p>`, link);
+        const list = w.hospitals.filter(h => h.county === id).sort((a, b) => b.outpatients - a.outpatients);
+        return section('Hospital waiting lists', `
+            <div class="row"><span class="big">${esc(fmt(c.outpatients))}</span><span class="soft">waiting for a first outpatient appointment</span></div>
+            <div class="row"><span class="big">${esc(fmt(c.inpatients))}</span><span class="soft">waiting for an operation or procedure</span></div>
+            <p class="muted">${esc(fmt(c.outpatientsLong + c.inpatientsLong))} of them have waited over a year.</p>
+            <ul class="list">${list.map(h => `<li>${esc(h.name)} <span class="meta">${esc(fmt(h.outpatients))} outpatient · ${esc(fmt(h.inpatients))} procedure</span></li>`).join('')}</ul>
+            <p class="muted">Counted at the hospital, wherever patients live. Adults and children together.</p>
+            ${waitingAge()}`, link);
+    }
+
+    function waitingListNationalSection() {
+        const w = data.waitinglists;
+        if (!w) return '';
+        const n = w.national;
+        const longest = [...w.hospitals].sort((a, b) => (b.outpatientsLong + b.inpatientsLong) - (a.outpatientsLong + a.inpatientsLong)).slice(0, 5);
+        return section('Hospital waiting lists', `
+            <div class="row"><span class="big">${esc(fmt(n.outpatients))}</span><span class="soft">waiting for a first outpatient appointment</span>${waitingChange(n.outpatientsChange)}</div>
+            <div class="row"><span class="big">${esc(fmt(n.inpatients))}</span><span class="soft">waiting for an operation or procedure</span>${waitingChange(n.inpatientsChange)}</div>
+            <p class="muted">${esc(fmt(n.outpatientsLong + n.inpatientsLong))} have waited over a year. Most waiting over a year:</p>
+            <ul class="list">${longest.map(h => `<li>${h.county ? `<a href="#" data-county="${esc(h.county)}">${esc(h.name)}</a>` : esc(h.name)}
+                <span class="meta">${esc(fmt(h.outpatientsLong + h.inpatientsLong))}</span></li>`).join('')}</ul>
+            ${waitingAge()}`, ['ntpf.ie', 'https://www.ntpf.ie/waiting-list-data/']);
+    }
+
+    // Heritage sites (National Monuments Service) and attractions (Fáilte Ireland) in a county
+    function thingsToSeeSection(id) {
+        const sites = (data.heritage?.sites || []).filter(s => s.county === id);
+        const a = data.attractions?.counties?.[id];
+        if (!sites.length && !a) return '';
+        const kinds = a ? Object.entries(ATTRACTION_KINDS).filter(([k]) => a[k]).map(([k, [, words]]) => `${fmt(a[k])} ${words.toLowerCase()}`) : [];
+        return section('Things to see', `
+            ${a ? `<div class="row"><span class="big">${esc(fmt(a.total))}</span><span class="soft">attractions listed by Fáilte Ireland</span></div>
+                <p class="muted">${esc(kinds.join(' · '))}</p>` : ''}
+            ${sites.length ? `<p class="soft"><strong>Historic sites to visit</strong></p>
+                <ul class="list">${sites.map(s => `<li>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name)}
+                    <span class="meta">${esc(s.kind)}</span></li>`).join('')}</ul>` : ''}
+            <p class="soft">Turn on Heritage sites or Attractions above the map to see them all.</p>`,
+            ['discoverireland.ie', 'https://www.discoverireland.ie/']);
+    }
+
+    // Sport Ireland's trails register (all-island)
+    function trailsSection(id) {
+        const c = data.trails?.counties?.[id];
+        if (!c) return '';
+        const list = data.trails.trails.filter(t => t.county === id).sort((a, b) => (b.km || 0) - (a.km || 0)).slice(0, 6);
+        const groups = Object.entries(TRAIL_GROUPS).filter(([g]) => c[g]).map(([g, [, words]]) => `${fmt(c[g])} ${words.toLowerCase()}`);
+        return section(`Trails (${c.total})`, `
+            <p class="soft">${esc(groups.join(' · '))}</p>
+            <p class="muted">Longest starting here:</p>
+            <ul class="list">${list.map(t => `<li>${esc(t.name)} <span class="meta">${esc(t.type)}${t.km ? ` · ${esc(t.km.toLocaleString('en-IE'))} km` : ''}</span></li>`).join('')}</ul>
+            <p class="muted">Counted by where each trail starts, so long ways appear in one county only.</p>`,
+            ['Sport Ireland', 'https://www.sportireland.ie/outdoors']);
     }
 
     // RNLI lifeboat launches over the last 7 days
