@@ -64,7 +64,7 @@ test('the page script (public/app.js) parses', () => {
 test('crowded-dot bubbles: only the dense overlays cluster, and bubbles grow with the count', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
     const clustered = new vm.Script(source.match(/const CLUSTERED = (\[[^\]]*\]);/)[1]).runInThisContext();
-    assert.deepEqual([...clustered].sort(), ['attractions', 'bikes', 'buses', 'luas', 'rivers', 'trails', 'water']);
+    assert.deepEqual([...clustered].sort(), ['attractions', 'bikes', 'buses', 'luas', 'rivers', 'trails', 'water', 'waterquality', 'wildlife']);
     const bubbleSize = new vm.Script(source.match(/const bubbleSize = ([^;]+);/)[1]).runInThisContext();
     assert.ok(bubbleSize(3) < bubbleSize(30) && bubbleSize(30) < bubbleSize(300));
 });

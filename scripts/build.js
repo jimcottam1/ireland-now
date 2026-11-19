@@ -11,7 +11,8 @@ const ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const SITE_DIR = process.env.SITE_DIR || path.join(ROOT, 'site');
 
-// name: [fetch function, hours to reuse the last result for (0 = fetch every run)]
+// name: [fetch function, hours to reuse the last result for (0 = fetch every run), optional cache version]
+// Raise a layer's cache version when its output changes shape, so a cached copy in the old shape isn't reused.
 const LAYERS = {
     warnings: [require('./layers/warnings').fetchWarnings, 0],
     weather: [require('./layers/weather').fetchWeather, 0],
@@ -46,16 +47,21 @@ const LAYERS = {
     homelessness: [require('./layers/homelessness').fetchHomelessness, 24],
     waitinglists: [require('./layers/waitinglists').fetchWaitingLists, 24],
     attractions: [require('./layers/attractions').fetchAttractions, 24],
-    trails: [require('./layers/trails').fetchTrails, 24],
+    trails: [require('./layers/trails').fetchTrails, 24, 2],   // v2: adds trail-lines.json
     heritage: [require('./layers/heritage').fetchHeritage, 24 * 7],
+    wildlife: [require('./layers/wildlife').fetchWildlife, 24],
+    waterquality: [require('./layers/waterquality').fetchWaterQuality, 24 * 7],
+    radon: [require('./layers/radon').fetchRadon, 24 * 30],
+    broadband: [require('./layers/broadband').fetchBroadband, 24 * 30],
     population: [require('./layers/population').fetchPopulation, 24 * 30],
     placenames: [require('./layers/placenames').fetchPlacenames, 24 * 30]
 };
 
-async function runLayer(name, [fetchLayer, maxAgeHours]) {
+async function runLayer(name, [fetchLayer, maxAgeHours, version]) {
     const started = Date.now();
     try {
-        const data = maxAgeHours ? await state.cached(name, maxAgeHours, fetchLayer) : await fetchLayer();
+        const cacheName = version ? `${name}-v${version}` : name;
+        const data = maxAgeHours ? await state.cached(cacheName, maxAgeHours, fetchLayer) : await fetchLayer();
         state.write(`last-${name}`, data);
         console.log(`✓ ${name}${data.fromCache ? ' (reused)' : ''} in ${Date.now() - started} ms`);
         return { data, status: { ok: true, stale: false, updatedAt: data.updatedAt } };

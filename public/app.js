@@ -4,14 +4,15 @@
 
     const LAYERS = ['warnings', 'weather', 'observations', 'forecast', 'airquality', 'rivers', 'tides', 'marine', 'trains', 'buses', 'grid', 'water',
         'niwater', 'trolleys', 'space', 'earthquakes', 'fuel', 'economy', 'rents', 'planning', 'crime', 'census', 'dail', 'beaches', 'tds', 'housing', 'population', 'placenames', 'luas', 'bikes', 'rnli', 'homelessness', 'webcams',
-        'waitinglists', 'heritage', 'attractions', 'trails'];
+        'waitinglists', 'heritage', 'attractions', 'trails', 'wildlife', 'waterquality', 'radon', 'broadband'];
     const data = {};
     let status = null;
     let counties = null;   // GeoJSON features
     let countyLayer = null;
     let selected = null;   // county id
     let view = 'warnings';
-    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false, bikes: false, rnli: false, webcams: false, heritage: false, attractions: false, trails: false };
+    const overlays = { water: true, stations: false, rivers: false, tides: false, buoys: false, quakes: false, trains: false, buses: false, luas: false, bikes: false, rnli: false, webcams: false, heritage: false, attractions: false, trails: false,
+        routes: false, wildlife: false, waterquality: false, radon: false, radar: false };
     const overlayLayers = {};
 
     // ---------- Helpers ----------
@@ -256,6 +257,13 @@
             value: id => data.rents?.counties?.[id]?.rent,
             describe: v => v == null ? 'No data' : `Average rent €${fmt(v)} a month`,
             ends: ['€1,000', '€2,300+'], title: 'Average monthly rent, new tenancies (RTB)'
+        },
+        broadband: {
+            label: 'Broadband',
+            stops: [[78, 'eef4fb'], [82, 'b8d3ee'], [86, '5f9bd6'], [90, '1f5a9e']],
+            value: id => data.broadband?.counties?.[id]?.broadband,
+            describe: v => v == null ? 'No data' : `${v.toFixed(1)}% of households had broadband (Census 2022)`,
+            ends: ['78%', '90%+'], title: 'Households with broadband, Census 2022'
         },
         planning: {
             label: 'Planning',
@@ -779,8 +787,116 @@
             }).bindPopup(`<strong>${esc(t.name)}</strong> <span class="popup-meta">${esc(t.type)}</span><br>
                 ${t.km ? `${esc(t.km.toLocaleString('en-IE'))} km · ` : ''}the dot marks where the trail starts<br>
                 <a href="https://www.sportireland.ie/outdoors" target="_blank" rel="noopener">Sport Ireland Outdoors ↗</a>`)))
+        },
+        // Whole trail routes: a separate file, loaded the first time this is switched on. Lines can't be
+        // clicked (the trail dots carry the details), so clicks go through to the county underneath.
+        routes: {
+            label: 'Trail routes', colour: '#65a30d', needs: 'trail-lines',
+            build: () => L.layerGroup((data['trail-lines'] || []).flatMap((pieces, i) => {
+                const t = data.trails?.trails?.[i];
+                if (!t) return [];
+                return pieces.filter(p => p.length > 1).map(p => L.polyline(p, {
+                    color: TRAIL_GROUPS[t.group][0], weight: 2.5, opacity: 0.85, interactive: false
+                }));
+            }))
+        },
+        wildlife: {
+            label: 'Wildlife', colour: '#0f766e', needs: 'wildlife-points',
+            build: () => L.layerGroup((data['wildlife-points'] || []).map(([group, common, name, day, , lat, lon]) => L.circleMarker([lat, lon], {
+                radius: 4.5, weight: 1, color: '#fff', fillColor: (WILDLIFE_GROUPS[group] || WILDLIFE_GROUPS.other)[0], fillOpacity: 0.95
+            }).bindPopup(`<strong>${esc(common || name)}</strong>${common ? ` <em class="popup-meta">${esc(name)}</em>` : ''}<br>
+                ${esc((WILDLIFE_GROUPS[group] || WILDLIFE_GROUPS.other)[1])} · seen ${esc(dayName(day))}<br>
+                <span class="popup-meta">Place rounded to about 1 km · via <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF.org</a></span>`)))
+        },
+        waterquality: {
+            label: 'River and lake quality', colour: '#0e7490', needs: 'waterquality-points',
+            build: () => L.layerGroup((data['waterquality-points'] || []).map(([kind, name, status, , lat, lon]) => L.circleMarker([lat, lon], {
+                radius: kind === 'lake' ? 5.5 : 4, weight: 1, color: '#fff', fillColor: WATER_STATUS[status], fillOpacity: 0.95
+            }).bindPopup(`<strong>${esc(name)}</strong> <span class="popup-meta">${kind === 'lake' ? 'Lake' : 'River stretch'}</span><br>
+                Rated <strong>${esc(status)}</strong> for its ecology, ${esc(data.waterquality?.period || '')}<br>
+                <a href="https://www.catchments.ie/maps/" target="_blank" rel="noopener">More on catchments.ie ↗</a>`)))
+        },
+        // EPA radon grid: 10 km squares shaded by the share of homes expected to be over the reference level
+        radon: {
+            label: 'Radon', colour: '#b45309',
+            build: () => L.layerGroup((data.radon?.squares || []).filter(s => s.percent >= 1).map(s => {
+                const [south, west, north, east] = s.bounds;
+                return L.rectangle([[south, west], [north, east]], {
+                    stroke: false, fillColor: radonColour(s), fillOpacity: 0.5, interactive: false
+                });
+            }))
+        },
+        // RainViewer radar tiles, fetched by the browser when switched on (not part of the hourly build)
+        radar: {
+            label: 'Rain radar', colour: '#2563eb',
+            build: () => radarFrame ? L.layerGroup([L.tileLayer(radarFrame.url, {
+                opacity: 0.7, maxNativeZoom: 7, maxZoom: 14, zIndex: 300,
+                attribution: 'Weather data by <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>'
+            })]) : L.layerGroup()
         }
     };
+
+    const WILDLIFE_GROUPS = {
+        birds: ['#2563eb', 'Bird'],
+        mammals: ['#92400e', 'Mammal'],
+        insects: ['#ca8a04', 'Insect or spider'],
+        plants: ['#16a34a', 'Plant'],
+        fungi: ['#9333ea', 'Fungus'],
+        'sea life': ['#0891b2', 'Sea life'],
+        other: ['#64748b', 'Other']
+    };
+    // The EPA's own status colours
+    const WATER_STATUS = { High: '#1d4ed8', Good: '#16a34a', Moderate: '#eab308', Poor: '#f97316', Bad: '#dc2626' };
+    const RADON_BANDS = [[20, '#7f1d1d', '20% or more of homes'], [10, '#dc2626', '10–20% (High Radon Area)'], [5, '#f59e0b', '5–10%'], [1, '#fde68a', '1–5%']];
+    const radonColour = s => s.high ? (s.percent >= 20 ? RADON_BANDS[0][1] : RADON_BANDS[1][1]) : (RADON_BANDS.slice(2).find(([min]) => s.percent >= min) || RADON_BANDS[3])[1];
+
+    // ---------- Rain radar (RainViewer, loaded by the browser while switched on) ----------
+
+    let radarFrame = null;   // { url, time }
+    let radarTimer = null;
+    async function loadRadar() {
+        try {
+            const res = await fetch('https://api.rainviewer.com/public/weather-maps.json', { cache: 'no-cache' });
+            const maps = await res.json();
+            const last = maps?.radar?.past?.at(-1);
+            if (!last || !/^https:\/\/[a-z0-9.-]+\.rainviewer\.com$/.test(maps.host) || !/^\/v2\/radar\/[\w-]+$/.test(last.path)) throw new Error('radar list not recognised');
+            const fresh = radarFrame?.time !== last.time;
+            radarFrame = { url: `${maps.host}${last.path}/256/{z}/{x}/{y}/2/1_1.png`, time: new Date(last.time * 1000).toISOString() };
+            DOT_KEYS.radar = [['#2563eb', `Rain or showers (radar picture from ${clock(radarFrame.time)})`]];
+            if (fresh) { drawOverlay('radar'); renderLegend(); }
+        } catch (error) {
+            console.warn('Rain radar unavailable:', error.message);
+        }
+    }
+    /** Keep the radar current while it's on (new pictures every 10 minutes); stop when it's off. */
+    function syncRadar() {
+        if (overlays.radar && !radarTimer) { loadRadar(); radarTimer = setInterval(loadRadar, 10 * 60000); }
+        if (!overlays.radar && radarTimer) { clearInterval(radarTimer); radarTimer = null; }
+    }
+
+    // ---------- Overlay data loaded on demand ----------
+
+    const extraLoading = {};
+    /** Fetch the extra file an overlay needs (once), then redraw that overlay. */
+    function ensureExtra(name) {
+        const need = OVERLAYS[name]?.needs;
+        if (!need || data[need] || extraLoading[need]) return;
+        extraLoading[need] = fetch(`data/${need}.json`, { cache: 'no-cache' })
+            .then(r => r.ok ? r.json() : null)
+            .then(json => {
+                if (!json) return;
+                data[need] = json;
+                drawOverlay(name);
+                // Other overlays sharing the file (none yet) would redraw here too
+            })
+            .catch(() => { /* stays empty; the button still works */ })
+            .finally(() => { delete extraLoading[need]; });
+    }
+    /** Load whatever the switched-on overlays need (after start, a shared link or a toggle). */
+    function loadOverlayNeeds() {
+        for (const [name, on] of Object.entries(overlays)) if (on) ensureExtra(name);
+        syncRadar();
+    }
 
     // Attraction and trail dot colours: [colour, words]
     const ATTRACTION_KINDS = {
@@ -864,14 +980,19 @@
         rnli: [['#1d4ed8', 'Launched in the last 7 days (bigger = more)'], ['#93b4e8', 'No launches in the last 7 days']],
         webcams: [['#be185d', 'Webcam (opens on Windy.com)'], ['#e3a6c4', 'Picture not updated for over a day']],
         heritage: [['#7a4a1f', 'Historic site you can visit']],
+        routes: Object.values(TRAIL_GROUPS).map(([c, w]) => [c, `${w} route`]),
+        wildlife: Object.values(WILDLIFE_GROUPS).map(([c, w]) => [c, w]),
+        waterquality: Object.entries(WATER_STATUS).map(([s, c]) => [c, s]),
+        radon: RADON_BANDS.map(([, c, w]) => [c, w]),
+        radar: [['#2563eb', 'Rain or showers now (radar)']],
         attractions: Object.values(ATTRACTION_KINDS).map(([c, w]) => [c, w]),
         trails: Object.values(TRAIL_GROUPS).map(([c, w]) => [c, `${w} (dot where it starts)`])
     };
 
-    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', bikes: 'Bike station', rnli: 'Lifeboat station', webcams: 'Webcam', heritage: 'Heritage site', attractions: 'Attraction', trails: 'Trail' };
+    const DOT_NAMES = { water: 'Water notice', stations: 'Weather station', rivers: 'River gauge', tides: 'Tide gauge', buoys: 'Sea buoy', quakes: 'Earthquake', trains: 'Train', buses: 'Bus', luas: 'Luas stop', bikes: 'Bike station', rnli: 'Lifeboat station', webcams: 'Webcam', heritage: 'Heritage site', attractions: 'Attraction', trails: 'Trail', wildlife: 'Sighting', waterquality: 'River or lake' };
 
     // Dense overlays merge into numbered bubbles when zoomed out; sparse ones (their dots carry meaning) never do
-    const CLUSTERED = ['water', 'rivers', 'buses', 'bikes', 'luas', 'attractions', 'trails'];
+    const CLUSTERED = ['water', 'rivers', 'buses', 'bikes', 'luas', 'attractions', 'trails', 'wildlife', 'waterquality'];
     const canCluster = typeof L.markerClusterGroup === 'function';   // false if the library was blocked: plain dots then
     const bubbleSize = n => n < 10 ? 34 : n < 100 ? 42 : 52;
 
@@ -892,17 +1013,20 @@
         });
     }
 
+    function drawOverlay(name) {
+        const def = OVERLAYS[name];
+        overlayLayers[name]?.remove();
+        const built = def.build();
+        if (canCluster && CLUSTERED.includes(name)) {
+            overlayLayers[name] = clusterGroup(def.colour);
+            overlayLayers[name].addLayers(built.getLayers());
+        } else overlayLayers[name] = built;
+        wireDots(overlayLayers[name], DOT_NAMES[name] || def.label, def.colour);
+        if (overlays[name]) overlayLayers[name].addTo(map);
+    }
+
     function drawOverlays() {
-        for (const [name, def] of Object.entries(OVERLAYS)) {
-            overlayLayers[name]?.remove();
-            const built = def.build();
-            if (canCluster && CLUSTERED.includes(name)) {
-                overlayLayers[name] = clusterGroup(def.colour);
-                overlayLayers[name].addLayers(built.getLayers());
-            } else overlayLayers[name] = built;
-            wireDots(overlayLayers[name], DOT_NAMES[name] || def.label, def.colour);
-            if (overlays[name]) overlayLayers[name].addTo(map);
-        }
+        for (const name of Object.keys(OVERLAYS)) drawOverlay(name);
     }
 
     // ---------- Controls ----------
@@ -925,6 +1049,7 @@
             const key = o.dataset.overlay;
             overlays[key] = !overlays[key];
             overlays[key] ? overlayLayers[key].addTo(map) : overlayLayers[key].remove();
+            loadOverlayNeeds();
             renderControls(); renderLegend(); updateHash();
         }
         // Webcam players in the county panel (map popups handle their own, in the popupopen listener)
@@ -1298,9 +1423,13 @@
         // Webcams (all-island; only counties that have one)
         html += webcamsSection(id);
 
-        // Things to see and trails
+        // Things to see, trails and wildlife
         if (!ni) html += thingsToSeeSection(id);
         html += trailsSection(id);
+        html += wildlifeSection(id);
+
+        // Rivers and lakes, radon (EPA, Republic only)
+        if (!ni) html += waterQualitySection(id) + radonSection(id);
 
         // House prices
         const h = data.housing?.counties?.[id];
@@ -1377,6 +1506,17 @@
             <div class="row"><span class="big">${esc(fmt(pop.population))}</span><span class="soft">people (Census 2022)</span></div>
             <p class="muted">${esc(fmt(pop.density))} per km² · ${esc(fmt(pop.areaKm2))} km²</p>
             ${censusHtml(id)}` : unavailable, ['CSO', 'https://data.cso.ie/table/FY003A']);
+
+        // Broadband (Census 2022)
+        const bb = data.broadband?.counties?.[id];
+        if (bb && !ni) {
+            const nat = data.broadband.national?.broadband;
+            html += section('Broadband at home', `
+                <div class="row"><span class="big">${esc(bb.broadband.toFixed(1))}%</span><span class="soft">of households had broadband</span>
+                ${nat != null ? `<span class="pill ${bb.broadband >= nat ? 'down' : 'warn'}">${bb.broadband >= nat ? 'above' : 'below'} the ${esc(nat.toFixed(1))}% average</span>` : ''}</div>
+                <p class="muted">${esc(bb.none.toFixed(1))}% had no internet at all. Out of ${esc(fmt(bb.households))} households.</p>
+                ${asOf('Census 2022 (April 2022)')}`, ['CSO', data.broadband.source.url]);
+        }
 
         // TDs
         if (ni) {
@@ -1541,6 +1681,53 @@
             <ul class="list">${list.map(t => `<li>${esc(t.name)} <span class="meta">${esc(t.type)}${t.km ? ` · ${esc(t.km.toLocaleString('en-IE'))} km` : ''}</span></li>`).join('')}</ul>
             <p class="muted">Counted by where each trail starts, so long ways appear in one county only.</p>`,
             ['Sport Ireland', 'https://www.sportireland.ie/outdoors']);
+    }
+
+    // Wildlife seen in the last 30 days (GBIF; all-island)
+    function wildlifeSection(id) {
+        const w = data.wildlife;
+        const c = w?.counties?.[id];
+        if (!c) return '';
+        // The group names are already plural ("birds", "fungi", "sea life")
+        const groups = Object.entries(c.groups).sort((a, b) => b[1] - a[1]).map(([g, n]) => `${fmt(n)} ${g === 'insects' ? 'insects and spiders' : g}`);
+        return section('Wildlife seen', `
+            <div class="row"><span class="big">${esc(fmt(c.sightings))}</span><span class="soft">sightings of ${esc(fmt(c.speciesCount))} species in the last ${esc(w.days)} days</span></div>
+            <p class="muted">${esc(groups.join(' · '))}</p>
+            <p class="muted">Most seen:</p>
+            <ul class="list">${c.top.map(([name, n]) => `<li>${esc(name)} <span class="meta">${esc(n)}</span></li>`).join('')}</ul>
+            <p class="muted">Records shared by the public and recorders through iNaturalist, the National Biodiversity Data Centre and others, via GBIF. Busy places get more records.</p>
+            ${w.newest ? asOf(`Newest sighting ${dayName(w.newest)}`, hoursOld(w.newest + 'T12:00:00Z') > 10 * 24) : ''}`,
+            ['GBIF.org', 'https://www.gbif.org/occurrence/search?country=IE']);
+    }
+
+    // EPA river and lake quality: the share of each rated Good or High
+    function waterQualitySection(id) {
+        const w = data.waterquality;
+        const c = w?.counties?.[id];
+        if (!c) return '';
+        const rivers = Object.values(c.river).reduce((a, b) => a + b, 0);
+        const lakes = Object.values(c.lake).reduce((a, b) => a + b, 0);
+        const bar = t => `<span class="wq-bar" aria-hidden="true">${Object.entries(WATER_STATUS).map(([s, colour]) => t[s] ? `<span style="flex:${t[s]};background:${colour}" title="${esc(s)}: ${esc(t[s])}"></span>` : '').join('')}</span>`;
+        const line = (label, t, n, good) => n ? `
+            <p class="soft"><strong>${esc(good)}%</strong> of ${esc(fmt(n))} ${label} rated Good or High
+            <span class="meta">(${Object.keys(WATER_STATUS).filter(s => t[s]).map(s => `${t[s]} ${s.toLowerCase()}`).join(', ')})</span></p>${bar(t)}` : '';
+        return section('River and lake quality', `
+            ${line('river stretches', c.river, rivers, c.riverGood)}
+            ${line('lakes', c.lake, lakes, c.lakeGood)}
+            <p class="muted">Ecological status, the EU target being Good or better for every water. Nationally ${esc(w.national.riverGood)}% of rivers and ${esc(w.national.lakeGood)}% of lakes meet it.</p>
+            ${asOf(`EPA assessment ${w.period}`)}`, ['catchments.ie', 'https://www.catchments.ie/']);
+    }
+
+    // EPA radon map: how much of the county is a High Radon Area
+    function radonSection(id) {
+        const r = data.radon;
+        const c = r?.counties?.[id];
+        if (!c) return '';
+        return section('Radon', `
+            <div class="row"><span class="big">${esc(c.highShare)}%</span><span class="soft">of the county's 10 km squares are High Radon Areas</span></div>
+            <p class="muted">${esc(c.high)} of ${esc(c.squares)} squares, where 10% or more of homes are expected to be above the radon reference level. Radon is a natural gas from the ground; the only way to know a home's level is to test it.</p>
+            <p class="soft">Turn on Radon above the map to see the squares.</p>`,
+            ['epa.ie', 'https://www.epa.ie/environment-and-you/radon/']);
     }
 
     // RNLI lifeboat launches over the last 7 days
@@ -2003,6 +2190,7 @@
         renderLegend();
         drawCounties();
         drawOverlays();
+        loadOverlayNeeds();
         renderNational();
         renderMeta();
         selectCounty(startCounty);
@@ -2041,6 +2229,7 @@
     window.addEventListener('hashchange', () => {
         if (!counties) return;
         const county = readHash();
+        loadOverlayNeeds();
         for (const [key, on] of Object.entries(overlays)) {
             if (on && !map.hasLayer(overlayLayers[key])) overlayLayers[key].addTo(map);
             if (!on && map.hasLayer(overlayLayers[key])) overlayLayers[key].remove();

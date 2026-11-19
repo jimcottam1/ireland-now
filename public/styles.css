@@ -566,3 +566,7 @@ a { color: var(--brand); }
     .legend-row { margin-top: 0; }
     .chip { font-size: 12px; padding: 4px 9px; }
 }
+
+/* River and lake quality: a thin bar split by status */
+.wq-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 2px 0 10px; background: var(--line, #e5e7eb); }
+.wq-bar span { display: block; height: 100%; }

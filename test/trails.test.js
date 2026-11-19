@@ -45,6 +45,26 @@ test('a short register or an error answer fails, so the last good copy is kept',
     await assert.rejects(run([{ nothing: true }]), /not recognised/);
 });
 
+test('routes go in their own file, one per trail in the same order, starting at the dot', async () => {
+    const { d } = await run();
+    const lines = d.files['trail-lines.json'];
+    assert.equal(lines.length, d.trails.length);
+    d.trails.forEach((t, i) => {
+        const [lat, lon] = lines[i][0][0];
+        assert.ok(Math.abs(lat - t.lat) < 0.001 && Math.abs(lon - t.lon) < 0.001, `${t.name}'s route starts at its dot`);
+    });
+    assert.ok(!('line' in d.trails[0]), 'the main file has no routes');
+});
+
+test('a route with several pieces keeps each piece, in latitude-longitude order', async () => {
+    const one = structuredClone(pages);
+    const f = one[0].features.find(x => x.attributes.Trail_Name === 'Barrow Way');
+    f.geometry.paths = [[[-6.9268, 52.4871], [-6.93, 52.49]], [[-6.95, 52.5], [-6.96, 52.51], [-6.97, 52.52]]];
+    const { d } = await run(one);
+    const i = d.trails.findIndex(t => t.name === 'Barrow Way');
+    assert.deepEqual(d.files['trail-lines.json'][i], [[[52.4871, -6.9268], [52.49, -6.93]], [[52.5, -6.95], [52.51, -6.96], [52.52, -6.97]]]);
+});
+
 test('a page that never ends fails rather than looping', async () => {
     await assert.rejects(run(Array(10).fill(pages[0])), /still more after/);
 });

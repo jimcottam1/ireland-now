@@ -33,7 +33,12 @@ const TYPES = {
 
 const pageUrl = offset => `${QUERY}?where=1%3D1&outFields=Trail_ID,Trail_Name,Trail_Type,Shape__Length`
     + `&orderByFields=OBJECTID&resultOffset=${offset}&resultRecordCount=${PAGE}`
-    + '&outSR=4326&maxAllowableOffset=0.001&geometryPrecision=5&f=json';
+    + '&outSR=4326&maxAllowableOffset=0.001&geometryPrecision=4&f=json';
+
+/** A trail's pieces as [lat, lon] lists, rounded to about 10 m (the register's lines are simplified to ~100 m). */
+const routeOf = paths => paths
+    .map(piece => piece.map(([lon, lat]) => [Number(lat.toFixed(4)), Number(lon.toFixed(4))]))
+    .filter(piece => piece.length >= 2 || paths.length === 1);
 
 async function fetchTrails() {
     const features = [];
@@ -67,7 +72,8 @@ async function fetchTrails() {
             km: a.Shape__Length > 0 ? Number((a.Shape__Length / 1000).toFixed(1)) : null,
             county,
             lat: Number(lat.toFixed(5)),
-            lon: Number(lon.toFixed(5))
+            lon: Number(lon.toFixed(5)),
+            line: routeOf(f.geometry.paths)
         });
     }
     for (const t of unknownTypes) console.warn(`   Trails: new trail type "${t}" shown as "Trail"`);
@@ -82,12 +88,19 @@ async function fetchTrails() {
     }
     for (const c of Object.values(counties)) c.km = Math.round(c.km);
 
+    trails.sort((a, b) => a.name.localeCompare(b.name));
+    // Routes go in their own file, loaded only when Trails is switched on: one entry per trail, in the
+    // same order as `trails`, each a list of pieces of [lat, lon] points
+    const lines = trails.map(t => t.line);
+    for (const t of trails) delete t.line;
+
     return {
         updatedAt: new Date().toISOString(),
         source: SOURCE,
         allIsland: true,
-        trails: trails.sort((a, b) => a.name.localeCompare(b.name)),
-        counties
+        trails,
+        counties,
+        files: { 'trail-lines.json': lines }
     };
 }
 
