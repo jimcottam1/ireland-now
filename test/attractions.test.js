@@ -41,6 +41,6 @@ test('kinds come from the tags whether they are written with commas or spaces', 
 });
 
 test('a short or changed file fails, so the last good copy is kept', async () => {
-    await assert.rejects(run(raw.split('\r\n').slice(0, 300).join('\r\n')), /only \d+ in the file/);
+    await assert.rejects(run(raw.split(/\r?\n/).slice(0, 300).join('\n')), /only \d+ in the file/);
     await assert.rejects(run(raw.replace('"Tags"', '"Labels"')), /columns changed/);
 });
