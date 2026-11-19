@@ -326,10 +326,14 @@
     // Canvas rendering copes far better than SVG with ~700 bus markers
     // Touch screens: one finger scrolls the page, two fingers move and zoom the map (pinching pans too).
     // Mouse: the scroll wheel only zooms once you've clicked the map, so scrolling the page doesn't get stuck.
+    // The map can't be dragged away from Ireland: the box takes in the island, the Irish Sea and the
+    // offshore buoys (M6 is out at 15.9°W), with a little room so edge dots aren't against the frame
+    const MAP_BOUNDS = [[50.6, -16.8], [56.2, -4.6]];
     const coarse = window.matchMedia('(pointer: coarse)').matches;
     const map = L.map('map', {
         preferCanvas: true, zoomSnap: 0.25, minZoom: 5, maxZoom: 14, zoomControl: true,
-        scrollWheelZoom: false, dragging: !coarse, tap: false
+        scrollWheelZoom: false, dragging: !coarse, tap: false,
+        maxBounds: MAP_BOUNDS, maxBoundsViscosity: 1.0
     }).setView([53.4, -8.0], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,

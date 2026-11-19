@@ -69,6 +69,19 @@ test('crowded-dot bubbles: only the dense overlays cluster, and bubbles grow wit
     assert.ok(bubbleSize(3) < bubbleSize(30) && bubbleSize(30) < bubbleSize(300));
 });
 
+test('the map is held to a box around Ireland that still takes in every buoy and the whole island', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+    const [[south, west], [north, east]] = new vm.Script(source.match(/const MAP_BOUNDS = (\[\[[^;]+\]\]);/)[1]).runInThisContext();
+    assert.match(source, /maxBounds: MAP_BOUNDS, maxBoundsViscosity: 1(\.0)?\b/);
+    const inside = (lat, lon) => lat > south && lat < north && lon > west && lon < east;
+    // The island's corners: Mizen Head, Malin Head, Slea Head, the Ards Peninsula
+    for (const [lat, lon] of [[51.45, -9.82], [55.38, -7.37], [52.11, -10.46], [54.45, -5.43]]) assert.ok(inside(lat, lon), `${lat}, ${lon}`);
+    // The Marine Institute buoys, including M6 far out in the Atlantic
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'erddap-buoys.json'), 'utf8')).table;
+    const at = name => raw.columnNames.indexOf(name);
+    for (const row of raw.rows) assert.ok(inside(row[at('latitude')], row[at('longitude')]), `${row[at('station_id')]} is outside the map box`);
+});
+
 test('the page still works if the markercluster script is blocked', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
     assert.match(source, /const canCluster = typeof L\.markerClusterGroup === 'function'/);
